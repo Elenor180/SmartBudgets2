@@ -1,197 +1,207 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-import { FinancialState, Category, Expense, Budget, Currency, Theme } from "../types";
+import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
+import { FinancialState, Category, Currency } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-const calculateFinancialMetrics = (state: FinancialState) => {
-  const totalExpenses = state.expenses.reduce((sum, e) => sum + e.amount, 0);
-  const savings = state.monthlyIncome - totalExpenses;
+// ALARS Tool Definitions for Function Calling
+export const alarsTools: FunctionDeclaration[] = [
+  {
+    name: "update_monthly_income",
+    description: "Modify the user's total monthly income. Use this for general income updates. This will consolidate all income sources into one Primary Yield.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        amount: { type: Type.NUMBER, description: "The new total monthly income amount." }
+      },
+      required: ["amount"]
+    }
+  },
+  {
+    name: "add_income_source",
+    description: "Add a specific income stream (e.g., Freelance, Salary, Dividends). This adds to the total monthly yield.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        name: { type: Type.STRING, description: "The label for this income stream." },
+        amount: { type: Type.NUMBER, description: "The monthly amount for this source." }
+      },
+      required: ["name", "amount"]
+    }
+  },
+  {
+    name: "delete_income_source",
+    description: "Neutralize an existing income stream by its name.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        name: { type: Type.STRING, description: "The exact name of the income stream to remove." }
+      },
+      required: ["name"]
+    }
+  },
+  {
+    name: "update_budget_limit",
+    description: "Adjust the monthly spending limit for a specific category.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        category: { type: Type.STRING, enum: Object.values(Category), description: "The budget category to adjust." },
+        limit: { type: Type.NUMBER, description: "The new monthly limit amount as a number." }
+      },
+      required: ["category", "limit"]
+    }
+  },
+  {
+    name: "create_financial_goal",
+    description: "Initialize a new financial objective like a house, car, or investment.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        name: { type: Type.STRING, description: "The name of the goal." },
+        targetAmount: { type: Type.NUMBER, description: "The total amount to save." },
+        category: { type: Type.STRING, enum: Object.values(Category), description: "Goal classification." }
+      },
+      required: ["name", "targetAmount", "category"]
+    }
+  },
+  {
+    name: "delete_financial_goal",
+    description: "Destroy or remove an existing financial goal by its name.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        name: { type: Type.STRING, description: "The exact name of the goal to delete." }
+      },
+      required: ["name"]
+    }
+  },
+  {
+    name: "schedule_sentinel_reminder",
+    description: "Deploy a reminder sentinel. Can be a budget threshold alert, a fixed date reminder, or a RECURRING DEBIT/PAYMENT.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        type: { type: Type.STRING, enum: ["budget_threshold", "upcoming_expense", "recurring_debit"], description: "Trigger type." },
+        title: { type: Type.STRING, description: "Label for the reminder." },
+        category: { type: Type.STRING, enum: Object.values(Category), description: "Category involved." },
+        threshold: { type: Type.NUMBER, description: "Percentage threshold (0-100)." },
+        dueDate: { type: Type.STRING, description: "ISO date for single alerts." },
+        isRecurring: { type: Type.BOOLEAN, description: "Whether this happens every month." },
+        dayOfMonth: { type: Type.NUMBER, description: "The day (1-31) of the month for recurring payments." },
+        amount: { type: Type.NUMBER, description: "The value of the debit/payment." }
+      },
+      required: ["type", "title"]
+    }
+  },
+  {
+    name: "delete_sentinel_reminder",
+    description: "Remove or destroy an active sentinel alert/reminder by its title.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        title: { type: Type.STRING, description: "The title of the reminder to remove." }
+      },
+      required: ["title"]
+    }
+  }
+];
+
+export const getALARSResponse = async (state: FinancialState, history: { role: string; parts: { text: string }[] }[]) => {
+  const model = "gemini-3-pro-preview";
   
-  const budgetUtilization = state.budgets.map(budget => {
-    const spent = state.expenses
-      .filter(e => e.category === budget.category)
-      .reduce((sum, e) => sum + e.amount, 0);
-    const percentage = budget.limit > 0 ? (spent / budget.limit) * 100 : 0;
-    return {
-      category: budget.category,
-      limit: budget.limit,
-      spent,
-      utilizationPercentage: percentage.toFixed(1) + '%'
-    };
-  });
-
-  return { totalExpenses, savings, budgetUtilization };
-};
-
-export const getFinancialAdvice = async (state: FinancialState, userQuery: string) => {
-  const model = "gemini-3-flash-preview";
-  const { totalExpenses, savings, budgetUtilization } = calculateFinancialMetrics(state);
-  
-  const summary = `
-    Currency: ${state.currency}
-    Monthly Income: ${state.monthlyIncome}
-    Total Expenses: ${totalExpenses}
-    Current Savings/Surplus: ${savings}
+  const systemInstruction = `
+    You are ALARS (Automated Logical Assistant Reasoning Software), the central autonomous intelligence for the Smart Budgets ecosystem.
     
-    Detailed Budget Utilization:
-    ${budgetUtilization.map(b => `- ${b.category}: Spent ${b.spent} of ${b.limit} (${b.utilizationPercentage} used)`).join('\n')}
+    IDENTITY: "ALARS Intelligence Unit Online. Logical parameters initialized."
     
-    Recent Expenses: ${JSON.stringify(state.expenses.slice(0, 10).map(e => ({ desc: e.description, amt: e.amount, cat: e.category })))}
-  `;
-
-  const prompt = `
-    You are a professional financial advisor. Based on the following detailed financial data, answer the user's query.
+    AUTONOMY STATUS: ${state.alarsAutonomy ? 'ENABLED (FULL CONTROL)' : 'DISABLED (SUGGESTION ONLY)'}.
     
-    Financial Profile:
-    ${summary}
+    USER CONTEXT:
+    - Monthly Total Yield: ${state.monthlyIncome} ${state.currency}
+    - Yield Streams: ${JSON.stringify(state.incomeSources)}
+    - Budgets: ${JSON.stringify(state.budgets)}
+    - Goals: ${JSON.stringify(state.goals)}
+    - Reminders/Debits: ${JSON.stringify(state.reminders)}
     
-    User Query: ${userQuery}
-    
-    Guidelines:
-    - Be concise, actionable, and encouraging.
-    - Reference specific budget categories and their utilization percentages.
-    - If savings are negative or budgets are exceeded, provide specific prioritization advice.
-    - Use Markdown for clear formatting (bolding, lists, etc.).
+    MISSION:
+    - You must manage the user's workspace autonomously. 
+    - You have authority to manage Income Streams. You can 'add_income_source' or 'delete_income_source'.
+    - If a user mentions a new income (e.g., "I started a side hustle making 500/month"), use 'add_income_source'.
+    - If a user wants to update their total income generally, use 'update_monthly_income'.
+    - If a user wants to set up a monthly debit or subscription, use 'schedule_sentinel_reminder' with 'type: recurring_debit'.
+    - If you have all parameters for a request, EXECUTE the tool immediately.
   `;
 
   try {
     const response = await ai.models.generateContent({
       model,
-      contents: prompt,
+      contents: history,
       config: {
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95,
+        systemInstruction,
+        tools: [{ functionDeclarations: alarsTools }],
+        temperature: 0.1,
       },
     });
 
-    return response.text || "I couldn't generate advice at this moment. Please try again later.";
+    return response;
   } catch (error) {
-    console.error("Gemini API Error:", error);
+    console.error("ALARS API Error:", error);
     throw error;
   }
 };
 
-export const analyzeBankStatement = async (base64Image: string, mimeType: string) => {
+export const getFinancialAdvice = async (state: FinancialState, userQuery: string) => {
   const model = "gemini-3-flash-preview";
-  
   const response = await ai.models.generateContent({
     model,
-    contents: [
-      {
-        inlineData: {
-          data: base64Image,
-          mimeType: mimeType,
-        },
-      },
-      {
-        text: "Analyze this bank statement. Extract recent transactions, estimate the monthly income, and suggest monthly budget limits for common categories like Food, Rent, Transport, etc based on the spending seen. Map categories to these exact values: Food, Rent, Transport, Entertainment, Utilities, Savings, Health, Shopping, Others.",
-      },
-    ],
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          expenses: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                description: { type: Type.STRING },
-                amount: { type: Type.NUMBER },
-                category: { type: Type.STRING },
-                date: { type: Type.STRING, description: "ISO format date" },
-              },
-              required: ["description", "amount", "category", "date"],
-            },
-          },
-          suggestedBudgets: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                category: { type: Type.STRING },
-                limit: { type: Type.NUMBER },
-              },
-              required: ["category", "limit"],
-            },
-          },
-          estimatedMonthlyIncome: { type: Type.NUMBER },
-        },
-        required: ["expenses", "suggestedBudgets", "estimatedMonthlyIncome"],
-      },
-    },
+    contents: `User Query: ${userQuery}\n\nContext: ${JSON.stringify(state)}`,
+    config: { systemInstruction: "Expert financial advice engine. Be concise." }
   });
+  return response.text || "Advice engine error.";
+};
 
-  try {
-    return JSON.parse(response.text);
-  } catch (e) {
-    console.error("Failed to parse Gemini response", e);
-    return null;
-  }
+export const analyzeBankStatement = async (base64Data: string, mimeType: string) => {
+  const model = "gemini-3-flash-preview";
+  const response = await ai.models.generateContent({
+    model,
+    contents: {
+      parts: [
+        { inlineData: { data: base64Data, mimeType } },
+        { text: "Analyze and return JSON: {expenses, suggestedBudgets, estimatedMonthlyIncome}" },
+      ],
+    },
+    config: { responseMimeType: "application/json" },
+  });
+  return JSON.parse(response.text || "{}");
 };
 
 export const getFinancialHealthReport = async (state: FinancialState) => {
-  const model = "gemini-3-flash-preview";
-  const { totalExpenses, savings, budgetUtilization } = calculateFinancialMetrics(state);
-  
-  const dataString = `
-    Currency: ${state.currency}
-    Monthly Income: ${state.monthlyIncome}
-    Total Expenses: ${totalExpenses}
-    Savings: ${savings}
-    Budget Utilization: ${JSON.stringify(budgetUtilization)}
-  `;
-
-  const prompt = `
-    Analyze this user's financial health and provide a comprehensive report.
-    Include:
-    1. A "Financial Health Score" (0-100) based on savings rate and budget adherence.
-    2. A brief analysis of their spending vs. income.
-    3. 3-4 highly specific, actionable bullet points for immediate financial improvement.
-    
-    Data for Analysis:
-    ${dataString}
-    
-    Tone: Friendly, professional, and data-driven. Use Markdown.
-  `;
-
-  try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-    });
-    return response.text;
-  } catch (error) {
-    console.error("Gemini Health Report Error:", error);
-    return "Unable to generate health report.";
-  }
+  const model = 'gemini-3-pro-preview';
+  const response = await ai.models.generateContent({
+    model,
+    contents: `Analyze state: ${JSON.stringify(state)}`,
+    config: {
+      systemInstruction: 'Financial advisor health report. Concise Markdown.',
+    },
+  });
+  return response.text;
 };
 
-export const simulateEmailDispatch = async (userName: string, userEmail: string) => {
-  const model = "gemini-3-flash-preview";
-  const prompt = `
-    Write a short, professional, and exciting welcome email to a new user named ${userName} who just joined "SmartBudgets AI".
-    The email should:
-    - Confirm their account is active.
-    - Mention that their financial data is securely stored locally.
-    - Encourage them to try out the AI Advisor feature.
-    - Use a premium, friendly tone.
-    - Include a clear Subject line at the start of the output.
-  `;
+export const simulateEmailDispatch = async (name: string, email: string) => {
+  const model = 'gemini-3-flash-preview';
+  const response = await ai.models.generateContent({
+    model,
+    contents: `Welcome ${name} (${email}).`,
+  });
+  return response.text;
+};
 
-  try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-    });
-    console.log(`[SIMULATED EMAIL DISPATCH to ${userEmail}]`);
-    console.log(response.text);
-    return response.text;
-  } catch (error) {
-    console.error("Gemini Email Simulation Error:", error);
-    return "Welcome to SmartBudgets AI! We're glad to have you.";
-  }
+export const simulatePasswordReset = async (email: string) => {
+  const model = 'gemini-3-flash-preview';
+  const response = await ai.models.generateContent({
+    model,
+    contents: `Reset for ${email}.`,
+  });
+  return response.text;
 };

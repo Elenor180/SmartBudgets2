@@ -4,69 +4,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SmartBudgets AI</title>
+    <title>Smart Budgets | QR Intelligence</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         darkMode: 'class',
         theme: {
           extend: {
+            colors: {
+              cyber: {
+                950: '#020617',
+                900: '#0f172a',
+                800: '#1e293b',
+                blue: '#38bdf8',
+                neon: '#6366f1',
+                purple: '#a855f7',
+                emerald: '#10b981',
+              }
+            },
             animation: {
-              slideUp: 'slideUp 0.5s ease-out forwards',
-              fadeIn: 'fadeIn 0.3s ease-out forwards',
+              'pulse-glow': 'pulseGlow 2s infinite',
+              'slide-up': 'slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'fade-in': 'fadeIn 0.4s ease-out forwards',
+              'float': 'float 3s ease-in-out infinite',
             },
             keyframes: {
+              pulseGlow: {
+                '0%, 100%': { opacity: '1', filter: 'brightness(1)' },
+                '50%': { opacity: '0.8', filter: 'brightness(1.5)' },
+              },
               slideUp: {
-                '0%': { transform: 'translateY(20px)', opacity: '0' },
+                '0%': { transform: 'translateY(40px)', opacity: '0' },
                 '100%': { transform: 'translateY(0)', opacity: '1' },
               },
               fadeIn: {
                 '0%': { opacity: '0' },
                 '100%': { opacity: '1' },
+              },
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
               }
             }
           }
         }
       }
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --brand-color: #4f46e5;
-        }
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Space Grotesk', sans-serif;
             -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            transition: background-color 0.3s ease, color 0.3s ease;
+            background-color: #020617;
+            color: #f8fafc;
         }
-        /* Custom scrollbar for a cleaner look */
-        ::-webkit-scrollbar {
-            width: 6px;
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* High-Fidelity Glassmorphism */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
         }
-        ::-webkit-scrollbar-track {
-            background: transparent;
+        
+        .neon-border {
+            position: relative;
         }
-        ::-webkit-scrollbar-thumb {
-            background: #e2e8f0;
-            border-radius: 10px;
+        .neon-border::after {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            background: linear-gradient(45deg, #6366f1, #38bdf8, #a855f7);
+            z-index: -1;
+            border-radius: inherit;
+            opacity: 0.2;
+            transition: opacity 0.3s ease;
         }
-        .dark ::-webkit-scrollbar-thumb {
-            background: #334155;
+        .neon-border:hover::after {
+            opacity: 0.5;
         }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #cbd5e1;
-        }
-        .glass {
-            background: rgba(255, 255, 255, 0.7);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
-        .dark .glass {
-            background: rgba(15, 23, 42, 0.7);
-        }
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* Glowing Text */
+        .glow-text-neon { text-shadow: 0 0 10px rgba(99, 102, 241, 0.5); }
+        .glow-text-emerald { text-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+        
+        /* Custom Progress */
+        .progress-glow {
+            box-shadow: 0 0 15px currentColor;
         }
     </style>
 <script type="importmap">
@@ -83,7 +111,7 @@
 }
 </script>
 </head>
-<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+<body class="selection:bg-indigo-500/30">
     <div id="root"></div>
 </body>
 </html>

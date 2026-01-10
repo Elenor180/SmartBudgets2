@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { FinancialState, Category, Expense } from '../types';
-import { Trash2, PlusCircle, Filter, X, Search, Calendar, Tag, CreditCard, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Trash2, PlusCircle, Filter, X, Search, Calendar, Tag, CreditCard, AlertTriangle, CheckCircle2, Activity, Shield } from 'lucide-react';
 
 interface Props {
   state: FinancialState;
@@ -27,7 +27,7 @@ const ExpenseTracker: React.FC<Props> = ({ state, addExpense, deleteExpense, for
     if (!amount || isNaN(Number(amount))) return null;
     const numAmt = Number(amount);
     const budget = state.budgets.find(b => b.category === category);
-    if (!budget) return { status: 'none' };
+    if (!budget) return { status: 'untracked' };
 
     const spent = state.expenses
       .filter(e => e.category === category)
@@ -83,63 +83,67 @@ const ExpenseTracker: React.FC<Props> = ({ state, addExpense, deleteExpense, for
   const hasActiveFilters = filterCategory !== 'All' || startDate || endDate || minAmount || maxAmount;
 
   return (
-    <div className="space-y-12 animate-fadeIn">
-      <header>
-        <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">Ledger & History</h2>
-        <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Capture every movement of your capital with precision.</p>
+    <div className="space-y-12 animate-fade-in">
+      <header className="border-b border-white/5 pb-8">
+        <div className="flex items-center space-x-3 mb-2">
+           <div className="bg-indigo-600/20 p-2 rounded-lg"><Activity className="text-indigo-400" size={18} /></div>
+           <span className="mono text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em]">Neural Ledger v3.1</span>
+        </div>
+        <h2 className="text-5xl font-black text-white tracking-tighter glow-text-neon">Audit Logs</h2>
+        <p className="text-slate-400 mt-2 font-medium">Immutable record of capital outflows and consumption events.</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        {/* Form Column */}
         <div className="lg:col-span-4">
-          <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] shadow-sm border border-slate-100/50 dark:border-slate-800/50 sticky top-12">
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-8 flex items-center space-x-2">
-               <div className="bg-indigo-600 p-2 rounded-xl text-white">
-                  <PlusCircle size={20} />
+          <form onSubmit={handleSubmit} className="glass-panel p-10 rounded-[3rem] sticky top-12 border-l-4 border-indigo-600">
+            <h3 className="text-2xl font-black text-white tracking-tight mb-10 flex items-center space-x-4">
+               <div className="bg-white/10 p-2.5 rounded-xl">
+                  <PlusCircle className="text-indigo-400" size={24} />
                </div>
-               <span>Log Transaction</span>
+               <span>Log Event</span>
             </h3>
-            <div className="space-y-6">
+            
+            <div className="space-y-7">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Description</label>
+                <label className="mono text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Event Description</label>
                 <div className="relative">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
                   <input 
                     type="text"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="e.g. Amazon Cloud"
-                    className="w-full pl-12 pr-4 py-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 focus:ring-2 focus:ring-indigo-600 focus:bg-white dark:focus:bg-slate-900 outline-none transition-all font-bold text-slate-700 dark:text-slate-200"
+                    placeholder="e.g. Server Allocation"
+                    className="w-full pl-14 pr-6 py-5 rounded-2xl bg-white border border-white/10 focus:border-indigo-500 outline-none transition-all font-bold text-black placeholder:text-slate-700"
                     required
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Value</label>
+                  <label className="mono text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Magnitude</label>
                   <div className="relative">
-                    <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <CreditCard className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
                     <input 
                       type="number"
                       step="0.01"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       placeholder="0.00"
-                      className="w-full pl-12 pr-4 py-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 focus:ring-2 focus:ring-indigo-600 focus:bg-white dark:focus:bg-slate-900 outline-none transition-all font-bold text-slate-700 dark:text-slate-200"
+                      className="w-full pl-14 pr-6 py-5 rounded-2xl bg-white border border-white/10 focus:border-indigo-500 outline-none transition-all font-bold text-black placeholder:text-slate-700"
                       required
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date</label>
+                  <label className="mono text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Timestamp</label>
                   <div className="relative">
-                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <Calendar className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
                     <input 
                       type="date"
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
-                      className="w-full pl-12 pr-4 py-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 focus:ring-2 focus:ring-indigo-600 focus:bg-white dark:focus:bg-slate-900 outline-none transition-all font-bold text-slate-700 dark:text-slate-200"
+                      className="w-full pl-14 pr-6 py-5 rounded-2xl bg-white border border-white/10 focus:border-indigo-500 outline-none transition-all font-bold text-black text-xs"
                       required
                     />
                   </div>
@@ -147,13 +151,13 @@ const ExpenseTracker: React.FC<Props> = ({ state, addExpense, deleteExpense, for
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Category</label>
+                <label className="mono text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Category Protocol</label>
                 <div className="relative">
-                  <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <Tag className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
                   <select 
                     value={category}
                     onChange={(e) => setCategory(e.target.value as Category)}
-                    className="w-full pl-12 pr-4 py-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 focus:ring-2 focus:ring-indigo-600 focus:bg-white dark:focus:bg-slate-900 outline-none transition-all font-bold text-slate-700 dark:text-slate-200 bg-white shadow-inner"
+                    className="w-full pl-14 pr-6 py-5 rounded-2xl bg-white border border-white/10 focus:border-indigo-500 outline-none transition-all font-bold text-black appearance-none cursor-pointer"
                   >
                     {Object.values(Category).map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
@@ -162,74 +166,75 @@ const ExpenseTracker: React.FC<Props> = ({ state, addExpense, deleteExpense, for
                 </div>
               </div>
 
-              {/* Budget Impact Indicator */}
-              {budgetImpact && budgetImpact.status !== 'none' && (
-                <div className={`p-4 rounded-2xl border flex items-start space-x-3 transition-all animate-slideUp ${
+              {/* Neural Impact Analysis */}
+              {budgetImpact && (
+                <div className={`p-6 rounded-[2rem] border-2 animate-slide-up ${
                   budgetImpact.status === 'danger' 
-                    ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-100 dark:border-rose-900/30 text-rose-700 dark:text-rose-400' 
-                    : 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                    ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' 
+                    : budgetImpact.status === 'untracked'
+                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                    : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
                 }`}>
-                  <div className="mt-0.5">
-                    {budgetImpact.status === 'danger' ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+                  <div className="flex items-center space-x-3 mb-2">
+                    {budgetImpact.status === 'danger' ? <AlertTriangle size={16} /> : <Shield size={16} />}
+                    <span className="mono text-[9px] font-black uppercase tracking-[0.2em]">Impact Analysis</span>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest">
-                      {budgetImpact.status === 'danger' ? 'Budget Overload Detected' : 'Strategic Allocation'}
-                    </p>
-                    <p className="text-xs font-bold mt-1">
-                      {budgetImpact.status === 'danger' 
-                        ? `This will exceed ${category} budget by ${formatMoney(Math.abs(budgetImpact.remaining))}` 
-                        : `${formatMoney(budgetImpact.remaining)} will remain in ${category} budget.`
-                      }
-                    </p>
-                  </div>
+                  <p className="text-sm font-bold leading-tight">
+                    {budgetImpact.status === 'danger' 
+                      ? `Critical: Threshold breach by ${formatMoney(Math.abs(budgetImpact.remaining))}` 
+                      : budgetImpact.status === 'untracked'
+                      ? `Warning: No guardrail for ${category}.`
+                      : `Secure: ${formatMoney(budgetImpact.remaining)} allocation remaining.`
+                    }
+                  </p>
                 </div>
               )}
 
               <button 
                 type="submit"
-                className="w-full bg-slate-900 dark:bg-indigo-600 text-white py-5 rounded-[2rem] font-black uppercase tracking-widest hover:bg-indigo-600 dark:hover:bg-indigo-500 transition-all shadow-xl dark:shadow-none flex items-center justify-center space-x-3 group active:scale-95"
+                className="w-full bg-indigo-600 text-white py-6 rounded-[2.5rem] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-xl flex items-center justify-center space-x-4 group active:scale-95"
               >
-                <PlusCircle size={20} className="group-hover:rotate-90 transition-transform" />
-                <span>Confirm Entry</span>
+                <PlusCircle size={22} className="group-hover:rotate-90 transition-transform" />
+                <span>Append to Ledger</span>
               </button>
             </div>
           </form>
         </div>
 
-        {/* List Column */}
         <div className="lg:col-span-8">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-sm border border-slate-100/50 dark:border-slate-800/50 overflow-hidden flex flex-col h-full min-h-[600px] max-h-[900px]">
-            <div className="px-10 py-8 border-b border-slate-50 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4">
-              <div className="flex items-center space-x-3">
-                <div className="bg-slate-900 dark:bg-slate-800 p-2 rounded-xl text-white">
-                   <Filter size={18} />
+          <div className="glass-panel rounded-[4rem] overflow-hidden flex flex-col h-full min-h-[700px]">
+            <div className="px-12 py-10 border-b border-white/5 flex flex-col md:flex-row justify-between items-center gap-6 bg-white/5">
+              <div className="flex items-center space-x-4">
+                <div className="bg-indigo-600/20 p-3 rounded-2xl text-indigo-400">
+                   <Shield size={24} />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-sm">Transaction Logs</h3>
-                  {hasActiveFilters && (
-                    <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400">Active Filters Applied</span>
-                  )}
+                  <h3 className="text-2xl font-black text-white tracking-tight">Financial Audit Log</h3>
+                  <div className="flex items-center space-x-2 mt-1">
+                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                     <span className="mono text-[9px] font-black text-slate-500 uppercase tracking-widest">Verified Integrity</span>
+                  </div>
                 </div>
               </div>
               <button 
                 onClick={() => setIsFilterVisible(!isFilterVisible)}
-                className={`px-6 py-2.5 rounded-2xl transition-all flex items-center space-x-2 text-xs font-black uppercase tracking-widest ${isFilterVisible ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 dark:shadow-none' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                className={`px-8 py-3.5 rounded-[1.75rem] transition-all flex items-center space-x-3 text-xs font-black uppercase tracking-widest border ${isFilterVisible ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg' : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'}`}
               >
-                <span>{isFilterVisible ? 'Dismiss' : 'Filters'}</span>
+                <Filter size={18} />
+                <span>{isFilterVisible ? 'Dismiss Matrix' : 'Audit Matrix'}</span>
               </button>
             </div>
 
-            {/* Filter Panel */}
+            {/* Matrix Filter */}
             {isFilterVisible && (
-              <div className="p-8 bg-slate-50 dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-6 animate-slideUp">
-                <div className="space-y-4">
+              <div className="p-10 bg-black/40 border-b border-white/5 grid grid-cols-1 md:grid-cols-2 gap-8 animate-slide_up">
+                <div className="space-y-5">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Category</label>
+                    <label className="mono text-[9px] font-black text-slate-500 uppercase tracking-widest">Protocol Type</label>
                     <select 
                       value={filterCategory}
                       onChange={(e) => setFilterCategory(e.target.value)}
-                      className="w-full px-5 py-3 text-sm font-bold rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white outline-none focus:border-indigo-600"
+                      className="w-full px-6 py-4 text-sm font-bold rounded-2xl border border-white/10 bg-white text-black outline-none focus:border-indigo-600 appearance-none"
                     >
                       <option value="All">All Categories</option>
                       {Object.values(Category).map(cat => (
@@ -238,105 +243,117 @@ const ExpenseTracker: React.FC<Props> = ({ state, addExpense, deleteExpense, for
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Value Range</label>
-                    <div className="flex items-center space-x-3">
+                    <label className="mono text-[9px] font-black text-slate-500 uppercase tracking-widest">Magnitude Range</label>
+                    <div className="flex items-center space-x-4">
                       <input 
                         type="number"
                         placeholder="Min"
                         value={minAmount}
                         onChange={(e) => setMinAmount(e.target.value)}
-                        className="w-full px-5 py-3 text-sm font-bold rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white outline-none"
+                        className="w-full px-5 py-4 text-sm font-bold rounded-2xl border border-white/10 bg-white text-black outline-none"
                       />
-                      <span className="text-slate-300 dark:text-slate-600">to</span>
                       <input 
                         type="number"
                         placeholder="Max"
                         value={maxAmount}
                         onChange={(e) => setMaxAmount(e.target.value)}
-                        className="w-full px-5 py-3 text-sm font-bold rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white outline-none"
+                        className="w-full px-5 py-4 text-sm font-bold rounded-2xl border border-white/10 bg-white text-black outline-none"
                       />
                     </div>
                   </div>
                 </div>
                 <div className="flex flex-col justify-between">
                    <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date Window</label>
-                    <div className="flex items-center space-x-3">
+                    <label className="mono text-[9px] font-black text-slate-500 uppercase tracking-widest">Temporal Window</label>
+                    <div className="flex items-center space-x-4">
                       <input 
                         type="date"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
-                        className="w-full px-5 py-3 text-sm font-bold rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white outline-none"
+                        className="w-full px-5 py-4 text-xs font-bold rounded-2xl border border-white/10 bg-white text-black outline-none"
                       />
                       <input 
                         type="date"
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
-                        className="w-full px-5 py-3 text-sm font-bold rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white outline-none"
+                        className="w-full px-5 py-4 text-xs font-bold rounded-2xl border border-white/10 bg-white text-black outline-none"
                       />
                     </div>
                   </div>
                   <button 
                     onClick={resetFilters}
-                    className="mt-6 text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] flex items-center justify-center space-x-2 py-3 border-2 border-rose-100 dark:border-rose-900/30 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors"
+                    className="mt-6 mono text-[10px] font-black text-rose-500 uppercase tracking-widest flex items-center justify-center space-x-3 py-4 border border-rose-500/20 rounded-2xl hover:bg-rose-500/10 transition-colors"
                   >
-                    <X size={14} />
-                    <span>Purge Filters</span>
+                    <X size={16} />
+                    <span>Clear Filter Protocol</span>
                   </button>
                 </div>
               </div>
             )}
 
-            <div className="divide-y divide-slate-50 dark:divide-slate-800 overflow-y-auto flex-1 no-scrollbar">
+            <div className="divide-y divide-white/5 overflow-y-auto flex-1 no-scrollbar">
               {filteredExpenses.length === 0 ? (
-                <div className="p-24 text-center flex flex-col items-center justify-center">
-                  <div className="bg-slate-50 dark:bg-slate-950 p-10 rounded-full mb-6">
-                    <Filter size={48} className="text-slate-200 dark:text-slate-800" />
+                <div className="p-32 text-center flex flex-col items-center">
+                  <div className="bg-white/5 p-12 rounded-full mb-8 border border-white/10 animate-pulse">
+                    <Search size={56} className="text-slate-800" />
                   </div>
-                  <h4 className="text-xl font-bold text-slate-900 dark:text-white">Zero Matches Found</h4>
-                  <p className="text-slate-400 mt-2 font-medium">Try broadening your search or filter criteria.</p>
+                  <h4 className="text-2xl font-black text-white tracking-tight">Zero Events Captured</h4>
+                  <p className="text-slate-500 mt-2 font-medium">Reset temporal matrix or filters to reveal logs.</p>
                 </div>
-              ) : filteredExpenses.map((expense) => (
-                <div key={expense.id} className="p-10 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all group relative">
-                  {/* Category accent line */}
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-600/0 group-hover:bg-indigo-600 transition-all"></div>
-                  
-                  <div className="flex items-center space-x-8">
-                    <div className="bg-white dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 w-16 h-16 rounded-[1.25rem] flex flex-col items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
-                      <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase">{new Date(expense.date).toLocaleDateString(undefined, { month: 'short' })}</span>
-                      <span className="text-xl font-black text-slate-900 dark:text-white leading-none">{new Date(expense.date).getDate()}</span>
-                    </div>
-                    <div>
-                      <h4 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">{expense.description}</h4>
-                      <div className="flex items-center space-x-3 mt-2">
-                        <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-950/30 px-3 py-1 rounded-full uppercase tracking-widest border border-indigo-100/50 dark:border-indigo-900/30">
-                          {expense.category}
-                        </span>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                          ID: {expense.id.split('-')[0]}
-                        </span>
+              ) : filteredExpenses.map((expense) => {
+                const budget = state.budgets.find(b => b.category === expense.category);
+                const isWarning = budget && (state.expenses.filter(e => e.category === expense.category && e.id === expense.id).length > 0); // Simplified check
+                
+                return (
+                  <div key={expense.id} className="p-12 flex items-center justify-between hover:bg-white/5 transition-all group relative">
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-600 scale-y-0 group-hover:scale-y-100 transition-transform origin-top"></div>
+                    
+                    <div className="flex items-center space-x-10">
+                      <div className="bg-cyber-950 border border-white/10 w-20 h-20 rounded-[2rem] flex flex-col items-center justify-center shadow-2xl group-hover:border-indigo-500/50 transition-all duration-500 transform group-hover:scale-110">
+                        <span className="mono text-[10px] font-black text-indigo-400 uppercase">{new Date(expense.date).toLocaleDateString(undefined, { month: 'short' })}</span>
+                        <span className="text-3xl font-black text-white leading-none">{new Date(expense.date).getDate()}</span>
+                      </div>
+                      <div>
+                        <h4 className="text-2xl font-black text-white tracking-tighter mb-1.5 group-hover:glow-text-neon transition-all">{expense.description}</h4>
+                        <div className="flex items-center space-x-4">
+                          <span className="mono text-[9px] font-black text-indigo-400 bg-indigo-500/10 px-4 py-1.5 rounded-full uppercase tracking-widest border border-indigo-500/20">
+                            {expense.category}
+                          </span>
+                          <span className="mono text-[8px] font-bold text-slate-600 uppercase tracking-widest">
+                            HEX: {expense.id.split('-')[0]}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center space-x-10">
-                    <div className="text-right">
-                      <span className="font-black text-slate-900 dark:text-white text-2xl tracking-tighter">{formatMoney(expense.amount)}</span>
+                    
+                    <div className="flex items-center space-x-12">
+                      <div className="text-right">
+                        <span className="text-3xl font-black text-white tracking-tighter">{formatMoney(expense.amount)}</span>
+                        <p className="mono text-[9px] text-slate-600 font-bold uppercase mt-1 tracking-widest">Magnitude</p>
+                      </div>
+                      <button 
+                        onClick={() => deleteExpense(expense.id)}
+                        className="p-4 text-slate-700 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-[1.5rem] transition-all opacity-0 group-hover:opacity-100 transform translate-x-10 group-hover:translate-x-0"
+                      >
+                        <Trash2 size={22} />
+                      </button>
                     </div>
-                    <button 
-                      onClick={() => deleteExpense(expense.id)}
-                      className="p-3 text-slate-300 dark:text-slate-700 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-2xl transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 size={20} />
-                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             
-            <div className="p-6 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 text-center">
-              <p className="text-[10px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.2em]">
-                Verified Records: {filteredExpenses.length} of {state.expenses.length}
-              </p>
+            <div className="p-8 bg-black/40 border-t border-white/5 flex justify-center items-center">
+              <div className="flex items-center space-x-8">
+                 <div className="flex items-center space-x-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-600"></div>
+                    <span className="mono text-[9px] font-bold text-slate-500 uppercase tracking-widest">Audited: {filteredExpenses.length}</span>
+                 </div>
+                 <div className="flex items-center space-x-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-600"></div>
+                    <span className="mono text-[9px] font-bold text-slate-500 uppercase tracking-widest">Validated Logs</span>
+                 </div>
+              </div>
             </div>
           </div>
         </div>

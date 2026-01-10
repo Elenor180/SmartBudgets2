@@ -40,20 +40,40 @@ export interface Budget {
   limit: number;
 }
 
-export interface IncomeRecord {
-  month: string; // Format: "MMM YYYY" e.g., "Jan 2024"
+export interface Goal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  currentAmount: number;
+  category: Category;
+  deadline?: string;
+  createdAt: string;
+}
+
+export interface IncomeSource {
+  id: string;
+  name: string;
   amount: number;
 }
 
-export type ReminderType = 'budget_threshold' | 'upcoming_expense';
+export interface IncomeRecord {
+  month: string;
+  amount: number;
+}
+
+export type ReminderType = 'budget_threshold' | 'upcoming_expense' | 'goal_milestone' | 'recurring_debit';
 
 export interface Reminder {
   id: string;
   type: ReminderType;
   title: string;
   category?: Category;
-  threshold?: number; // e.g., 80 for 80%
-  dueDate?: string; // For upcoming expenses
+  threshold?: number;
+  dueDate?: string;
+  amount?: number;
+  isRecurring?: boolean;
+  dayOfMonth?: number;
+  lastTriggeredMonth?: string; // Format: "YYYY-MM"
   triggered: boolean;
   createdAt: string;
 }
@@ -68,12 +88,15 @@ export interface NotificationPreferences {
 export interface FinancialState {
   expenses: Expense[];
   budgets: Budget[];
+  goals: Goal[];
   reminders: Reminder[];
   monthlyIncome: number;
+  incomeSources: IncomeSource[];
   currency: Currency;
   incomeHistory: IncomeRecord[];
   theme: Theme;
   notificationPreferences: NotificationPreferences;
+  alarsAutonomy: boolean;
 }
 
 export type NotificationType = 'success' | 'error' | 'warning' | 'info';

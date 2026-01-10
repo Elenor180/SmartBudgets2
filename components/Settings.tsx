@@ -1,266 +1,216 @@
 
 import React, { useState } from 'react';
-import { FinancialState, Currency, Theme, NotificationPreferences } from '../types';
-import { Save, User, Wallet, Globe, ShieldCheck, Lock, ArrowRight, Check, Moon, Sun, Palette, Mail, Bell, PieChart, Sparkles, Shield } from 'lucide-react';
+import { User as UserIcon, Wallet, Globe, ShieldCheck, Lock, ArrowRight, Check, Moon, Sun, Palette, Mail, Bell, PieChart, Sparkles, Shield, Cpu, Target, Zap, Trash2, Plus, DollarSign } from 'lucide-react';
+import { FinancialState, Currency, Theme, NotificationPreferences, Category, IncomeSource } from '../types';
 
 interface Props {
   state: FinancialState;
   updateIncome: (income: number) => void;
+  addIncomeSource: (source: IncomeSource) => void;
+  deleteIncomeSource: (id: string) => void;
   updateCurrency: (currency: Currency) => void;
   updateTheme: (theme: Theme) => void;
   updateNotificationPreferences: (prefs: NotificationPreferences) => void;
+  updateUserName: (name: string) => void;
+  updateBudget: (category: Category, limit: number) => void;
+  updateAlarsAutonomy: (autonomy: boolean) => void;
+  formatMoney: (amount: number) => string;
 }
 
-const Settings: React.FC<Props> = ({ state, updateIncome, updateCurrency, updateTheme, updateNotificationPreferences }) => {
-  const [income, setIncome] = useState<string>(state.monthlyIncome.toString());
-  const [currency, setCurrency] = useState<Currency>(state.currency);
+const Settings: React.FC<Props> = ({ 
+  state, updateIncome, addIncomeSource, deleteIncomeSource, updateCurrency, updateTheme, 
+  updateNotificationPreferences, updateUserName, updateBudget, updateAlarsAutonomy, formatMoney 
+}) => {
+  const [displayName, setDisplayName] = useState(() => {
+    const user = JSON.parse(localStorage.getItem('sb_current_user') || '{}');
+    return user.name || '';
+  });
+  const [incomeTotal, setIncomeTotal] = useState(state.monthlyIncome.toString());
+  const [newSourceName, setNewSourceName] = useState('');
+  const [newSourceAmount, setNewSourceAmount] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleGlobalSync = (e: React.FormEvent) => {
     e.preventDefault();
-    const newIncome = Number(income);
-    if (isNaN(newIncome) || newIncome < 0) return;
-    
-    updateIncome(newIncome);
-    updateCurrency(currency);
+    updateUserName(displayName);
+    if (Number(incomeTotal) !== state.monthlyIncome) {
+      updateIncome(Number(incomeTotal));
+    }
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 3000);
   };
 
-  const togglePreference = (key: keyof NotificationPreferences) => {
-    const newPrefs = {
-      ...state.notificationPreferences,
-      [key]: !state.notificationPreferences[key]
-    };
-    updateNotificationPreferences(newPrefs);
+  const handleAddSource = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSourceName || !newSourceAmount) return;
+    addIncomeSource({
+      id: Math.random().toString(36).substr(2, 9),
+      name: newSourceName,
+      amount: Number(newSourceAmount)
+    });
+    setNewSourceName('');
+    setNewSourceAmount('');
   };
 
-  const PreferenceToggle = ({ 
-    label, 
-    description, 
-    icon: Icon, 
-    active, 
-    onToggle 
-  }: { 
-    label: string, 
-    description: string, 
-    icon: any, 
-    active: boolean, 
-    onToggle: () => void 
-  }) => (
-    <div className="flex items-center justify-between py-4 first:pt-0 last:pb-0">
+  const PreferenceToggle = ({ label, icon: Icon, active, onToggle, danger }: { label: string, icon: any, active: boolean, onToggle: () => void, danger?: boolean }) => (
+    <div className="flex items-center justify-between py-5 border-b dark:border-slate-800 last:border-0">
       <div className="flex items-center space-x-4">
-        <div className={`p-3 rounded-2xl transition-colors ${active ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>
-          <Icon size={20} />
-        </div>
-        <div>
-          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{label}</p>
-          <p className="text-xs text-slate-400 font-medium">{description}</p>
+        <div className={`p-3 rounded-2xl ${active ? (danger ? 'bg-rose-600' : 'bg-indigo-600') : 'bg-slate-100 dark:bg-slate-800'} text-white`}><Icon size={18} /></div>
+        <div className="flex flex-col">
+          <span className="text-sm font-black dark:text-white uppercase tracking-tight">{label}</span>
+          {danger && <span className="text-[10px] font-bold text-rose-500 uppercase tracking-widest mt-0.5">Autonomous Control Mode</span>}
         </div>
       </div>
-      <button 
-        onClick={onToggle}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 ${active ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-slate-700'}`}
-      >
-        <span
-          className={`${
-            active ? 'translate-x-6' : 'translate-x-1'
-          } inline-block h-4 w-4 transform rounded-full bg-white shadow-lg transition-transform duration-300 ease-in-out`}
-        />
+      <button onClick={onToggle} className={`h-8 w-14 rounded-full transition-all relative ${active ? (danger ? 'bg-rose-600' : 'bg-indigo-600') : 'bg-slate-200 dark:bg-slate-700 shadow-inner'}`}>
+        <div className={`h-6 w-6 bg-white rounded-full absolute top-1 transition-all shadow-md ${active ? 'left-7' : 'left-1'}`} />
       </button>
     </div>
   );
 
   return (
-    <div className="space-y-12 animate-fadeIn max-w-4xl pb-12">
+    <div className="space-y-12 animate-fadeIn max-w-5xl pb-12">
       <header>
         <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">Configuration</h2>
-        <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Calibrate your profile and global platform preferences.</p>
+        <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Calibrate your neural profile and system-wide parameters.</p>
       </header>
 
-      <div className="grid grid-cols-1 gap-10">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-          {/* Appearance Toggle */}
-          <section className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] shadow-sm border border-slate-100/50 dark:border-slate-800/50 hover:shadow-xl transition-all duration-500 group">
-            <div className="flex items-center space-x-5 mb-8 border-b border-slate-50 dark:border-slate-800 pb-8">
-              <div className="bg-amber-100 dark:bg-amber-900/30 p-3 rounded-2xl shadow-lg">
-                <Palette size={24} className="text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Appearance</h3>
-                <p className="text-sm text-slate-400 font-medium">Interface visual preferences.</p>
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        <div className="lg:col-span-2 space-y-10">
+          {/* Neural Assistant Mode */}
+          <section className="bg-slate-900 text-white p-10 rounded-[3rem] shadow-2xl border border-slate-800 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-10 opacity-10 group-hover:scale-110 transition-transform">
+               <Zap size={140} />
             </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className={`p-3 rounded-2xl transition-colors ${state.theme === 'light' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                  {state.theme === 'light' ? <Sun size={20} /> : <Moon size={20} />}
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">System Theme</p>
-                  <p className="text-xs text-slate-400 font-medium">{state.theme === 'light' ? 'Currently Light Mode' : 'Currently Dark Mode'}</p>
-                </div>
+            <div className="relative z-10">
+              <div className="flex items-center space-x-4 mb-8">
+                <div className="bg-indigo-600 p-3 rounded-2xl"><Zap size={24} /></div>
+                <h3 className="text-2xl font-black tracking-tight">ALARS Governance</h3>
               </div>
-
-              <button 
-                onClick={() => updateTheme(state.theme === 'light' ? 'dark' : 'light')}
-                className="relative inline-flex h-10 w-20 items-center rounded-full bg-slate-200 dark:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2"
-              >
-                <span
-                  className={`${
-                    state.theme === 'dark' ? 'translate-x-11' : 'translate-x-1'
-                  } inline-block h-8 w-8 transform rounded-full bg-white dark:bg-indigo-600 shadow-lg ring-0 transition-transform duration-300 ease-in-out flex items-center justify-center`}
-                >
-                  {state.theme === 'dark' ? <Moon size={16} className="text-white" /> : <Sun size={16} className="text-amber-500" />}
-                </span>
-              </button>
-            </div>
-          </section>
-
-          {/* Email Notifications Section */}
-          <section className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] shadow-sm border border-slate-100/50 dark:border-slate-800/50 hover:shadow-xl transition-all duration-500 group">
-            <div className="flex items-center space-x-5 mb-8 border-b border-slate-50 dark:border-slate-800 pb-8">
-              <div className="bg-emerald-100 dark:bg-emerald-900/30 p-3 rounded-2xl shadow-lg">
-                <Mail size={24} className="text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Email Alerts</h3>
-                <p className="text-sm text-slate-400 font-medium">Manage notification channels.</p>
-              </div>
-            </div>
-            
-            <div className="space-y-2 divide-y divide-slate-50 dark:divide-slate-800">
+              <p className="text-slate-400 font-medium mb-10 max-w-lg">Enable autonomous workspace management. When active, ALARS can execute budget adjustments, goal setting, and yield management without manual confirmation.</p>
               <PreferenceToggle 
-                label="Weekly Reports" 
-                description="Comprehensive wealth summary." 
-                icon={PieChart}
-                active={state.notificationPreferences.weeklyReports}
-                onToggle={() => togglePreference('weeklyReports')}
-              />
-              <PreferenceToggle 
-                label="Budget Sentinels" 
-                description="Alerts for threshold breaches." 
-                icon={Bell}
-                active={state.notificationPreferences.budgetThresholds}
-                onToggle={() => togglePreference('budgetThresholds')}
-              />
-              <PreferenceToggle 
-                label="AI Insights" 
-                description="Neural strategy recommendations." 
-                icon={Sparkles}
-                active={state.notificationPreferences.aiInsights}
-                onToggle={() => togglePreference('aiInsights')}
-              />
-              <PreferenceToggle 
-                label="Security Hub" 
-                description="Session and integrity alerts." 
-                icon={Shield}
-                active={state.notificationPreferences.securityAlerts}
-                onToggle={() => togglePreference('securityAlerts')}
+                label="ALARS Autonomy" 
+                icon={Zap} 
+                active={state.alarsAutonomy} 
+                onToggle={() => updateAlarsAutonomy(!state.alarsAutonomy)} 
+                danger
               />
             </div>
           </section>
-        </div>
 
-        <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 p-10 rounded-[2.5rem] shadow-sm border border-slate-100/50 dark:border-slate-800/50 hover:shadow-xl transition-all duration-500 group">
-          <div className="space-y-10">
-            <div className="flex items-center space-x-5 border-b border-slate-50 dark:border-slate-800 pb-8">
-              <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-100 dark:shadow-indigo-900/20 group-hover:scale-110 transition-transform">
-                <User size={24} className="text-white" />
+          {/* Yield Management Section */}
+          <section className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
+            <div className="flex items-center space-x-4 mb-10 border-b dark:border-slate-800 pb-8">
+              <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-xl">
+                 <DollarSign className="text-emerald-600" />
               </div>
-              <div>
-                <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Financial Profile</h3>
-                <p className="text-sm text-slate-400 font-medium">Core parameters for analysis engines.</p>
-              </div>
+              <h3 className="text-2xl font-black dark:text-white">Yield Streams</h3>
             </div>
+            
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {state.incomeSources.map(source => (
+                  <div key={source.id} className="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800 group">
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{source.name}</p>
+                      <p className="text-lg font-black text-slate-900 dark:text-white">{formatMoney(source.amount)}</p>
+                    </div>
+                    <button onClick={() => deleteIncomeSource(source.id)} className="p-3 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100">
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                ))}
+              </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center space-x-2">
-                  <Wallet size={12} className="text-indigo-600" />
-                  <span>Monthly Post-Tax Yield</span>
-                </label>
-                <div className="relative">
-                   <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-slate-300 dark:text-slate-600 text-xl">$</div>
-                   <input 
-                    type="number"
-                    value={income}
-                    onChange={(e) => setIncome(e.target.value)}
-                    placeholder="4500"
-                    className="w-full pl-12 pr-6 py-5 rounded-2xl bg-slate-50 dark:bg-slate-950 border-2 border-transparent focus:border-indigo-600 focus:bg-white dark:focus:bg-slate-900 outline-none transition-all text-xl font-black text-slate-900 dark:text-white shadow-inner"
-                    required
+              <form onSubmit={handleAddSource} className="grid grid-cols-1 sm:grid-cols-12 gap-4 bg-slate-100/50 dark:bg-slate-800/50 p-6 rounded-[2rem]">
+                <div className="sm:col-span-6">
+                  <input 
+                    type="text" 
+                    value={newSourceName} 
+                    onChange={e => setNewSourceName(e.target.value)}
+                    placeholder="Source Label (e.g. Freelance)" 
+                    className="w-full px-5 py-3 rounded-xl bg-white border border-slate-200 dark:border-slate-700 font-bold text-black outline-none"
                   />
                 </div>
-              </div>
+                <div className="sm:col-span-4">
+                  <input 
+                    type="number" 
+                    value={newSourceAmount} 
+                    onChange={e => setNewSourceAmount(e.target.value)}
+                    placeholder="Amount" 
+                    className="w-full px-5 py-3 rounded-xl bg-white border border-slate-200 dark:border-slate-700 font-bold text-black outline-none"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <button type="submit" className="w-full h-full bg-indigo-600 text-white rounded-xl flex items-center justify-center hover:bg-indigo-700 transition-all">
+                    <Plus size={24} />
+                  </button>
+                </div>
+              </form>
+            </div>
+          </section>
 
+          <form onSubmit={handleGlobalSync} className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
+            <div className="flex items-center space-x-4 mb-10 border-b dark:border-slate-800 pb-8">
+              <Cpu className="text-indigo-600" />
+              <h3 className="text-2xl font-black dark:text-white">System Identification</h3>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center space-x-2">
-                  <Globe size={12} className="text-indigo-600" />
-                  <span>Standard Currency</span>
-                </label>
-                <select 
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value as Currency)}
-                  className="w-full px-6 py-5 rounded-2xl bg-slate-50 dark:bg-slate-950 border-2 border-transparent focus:border-indigo-600 focus:bg-white dark:focus:bg-slate-900 outline-none transition-all text-lg font-black text-slate-900 dark:text-white bg-white shadow-inner appearance-none cursor-pointer"
-                >
-                  <option value={Currency.USD}>USD ($) — US Dollar</option>
-                  <option value={Currency.EUR}>EUR (€) — Euro</option>
-                  <option value={Currency.ZAR}>ZAR (R) — SA Rand</option>
-                  <option value={Currency.GBP}>GBP (£) — British Pound</option>
-                  <option value={Currency.JPY}>JPY (¥) — Japanese Yen</option>
-                </select>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Display Label</label>
+                <div className="relative">
+                  <UserIcon className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input value={displayName} onChange={e => setDisplayName(e.target.value)} className="w-full pl-14 pr-4 py-5 rounded-[1.5rem] bg-white border dark:border-slate-800 outline-none font-bold text-black" />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Total Yield Sync (Override)</label>
+                <div className="relative">
+                  <Wallet className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input type="number" value={incomeTotal} onChange={e => setIncomeTotal(e.target.value)} className="w-full pl-14 pr-4 py-5 rounded-[1.5rem] bg-white border dark:border-slate-800 outline-none font-bold text-black" />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Global Currency</label>
+                <div className="relative">
+                  <Globe className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <select 
+                    value={state.currency} 
+                    onChange={e => updateCurrency(e.target.value as Currency)}
+                    className="w-full pl-14 pr-4 py-5 rounded-[1.5rem] bg-white border dark:border-slate-800 outline-none font-bold text-black appearance-none"
+                  >
+                    {Object.values(Currency).map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-between pt-12 mt-10 border-t border-slate-50 dark:border-slate-800 gap-6">
-            <button 
-              type="submit"
-              className="w-full sm:w-auto flex items-center justify-center space-x-4 bg-slate-900 dark:bg-indigo-600 text-white px-10 py-5 rounded-[2rem] font-black uppercase tracking-widest hover:bg-indigo-600 dark:hover:bg-indigo-500 transition-all shadow-2xl shadow-slate-200 dark:shadow-none group/btn active:scale-95"
-            >
-              <span>Synchronize Profile</span>
-              <ArrowRight size={18} className="group-hover/btn:translate-x-1 transition-transform" />
-            </button>
+            <div className="mt-10 pt-8 border-t dark:border-slate-800 flex items-center justify-between">
+              <button type="submit" className="bg-indigo-600 text-white px-10 py-5 rounded-[2rem] font-black uppercase tracking-widest text-xs flex items-center space-x-3 hover:bg-indigo-700 transition-all active:scale-95">
+                <span>Synchronize System</span>
+                <ArrowRight size={16} />
+              </button>
+              {showSuccess && <div className="text-emerald-500 font-black uppercase tracking-widest text-[10px] flex items-center space-x-2"><Check size={14} /><span>Logic Sync Verified</span></div>}
+            </div>
+          </form>
+        </div>
 
-            {showSuccess && (
-              <div className="flex items-center space-x-3 bg-emerald-50 dark:bg-emerald-900/20 px-6 py-3 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 animate-slideUp">
-                <Check size={18} strokeWidth={3} />
-                <span className="font-black uppercase tracking-widest text-[10px]">Vault Updated</span>
+        <div className="space-y-10">
+          <section className="bg-white dark:bg-slate-900 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
+            <h3 className="text-xl font-black dark:text-white mb-8">Interface Engine</h3>
+            <div className="flex items-center justify-between py-5 border-b dark:border-slate-800">
+              <div className="flex flex-col">
+                <span className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Theme</span>
+                <span className="text-sm font-bold dark:text-slate-200">System Visuals</span>
               </div>
-            )}
-          </div>
-        </form>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-           <div className="bg-indigo-600 dark:bg-indigo-900/50 text-white p-10 rounded-[2.5rem] shadow-2xl shadow-indigo-100 dark:shadow-none relative overflow-hidden group border border-transparent dark:border-indigo-500/20">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform"></div>
-              <div className="relative z-10">
-                <div className="bg-white/20 dark:bg-white/10 w-12 h-12 rounded-2xl flex items-center justify-center mb-6">
-                   <ShieldCheck size={24} className="text-emerald-400" />
-                </div>
-                <h4 className="text-xl font-black uppercase tracking-widest mb-4">Privacy Framework</h4>
-                <p className="text-sm font-medium leading-relaxed opacity-80">
-                  SmartBudgets operates on a Zero-Cloud persistence model. 100% of your transaction signatures remain on your local hardware.
-                </p>
-              </div>
-           </div>
-
-           <div className="bg-slate-100 dark:bg-slate-900 p-10 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 flex flex-col justify-between transition-colors">
-              <div>
-                <div className="bg-white dark:bg-slate-800 w-12 h-12 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
-                   <Lock size={20} className="text-slate-900 dark:text-slate-100" />
-                </div>
-                <h4 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-widest mb-4">API Security</h4>
-                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 leading-relaxed uppercase tracking-tighter">
-                  Communication with Gemini AI is ephemeral and anonymized. We never store logs of your advisor interactions on our infrastructure.
-                </p>
-              </div>
-              <div className="mt-8 flex items-center space-x-2">
-                 <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                 <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">End-to-End Encryption Active</span>
-              </div>
-           </div>
+              <button onClick={() => updateTheme(state.theme === 'light' ? 'dark' : 'light')} className="p-4 bg-slate-100 dark:bg-slate-800 rounded-2xl text-indigo-600 hover:scale-105 transition-transform">
+                {state.theme === 'light' ? <Sun size={24} /> : <Moon size={24} />}
+              </button>
+            </div>
+            <PreferenceToggle label="Reports" icon={PieChart} active={state.notificationPreferences.weeklyReports} onToggle={() => {}} />
+            <PreferenceToggle label="AI Insights" icon={Sparkles} active={state.notificationPreferences.aiInsights} onToggle={() => {}} />
+            <PreferenceToggle label="Security" icon={Shield} active={state.notificationPreferences.securityAlerts} onToggle={() => {}} />
+          </section>
         </div>
       </div>
     </div>

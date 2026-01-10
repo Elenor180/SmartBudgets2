@@ -18,16 +18,23 @@ import {
   ChevronRight,
   LogOut,
   User as UserIcon,
-  Bell
+  Bell,
+  Cpu,
+  Target,
+  Zap
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import BudgetManager from './components/BudgetManager';
 import ExpenseTracker from './components/ExpenseTracker';
-import GeminiAdvisor from './components/GeminiAdvisor';
+import ALARSAdvisor from './components/ALARSAdvisor';
 import Settings from './components/Settings';
 import Auth from './components/Auth';
 import ReminderManager from './components/ReminderManager';
-import { FinancialState, Expense, Category, Currency, AppNotification, NotificationType, Theme, User, Reminder, NotificationPreferences } from './types';
+import GoalTracker from './components/GoalTracker';
+import SplashScreen from './components/SplashScreen';
+import Logo from './components/Logo';
+import { FinancialState, Expense, Category, Currency, AppNotification, NotificationType, Theme, User, Reminder, NotificationPreferences, Goal, IncomeSource } from './types';
+import { getCurrencyLocale, getCurrencySymbol } from './services/currencyUtils';
 
 const getCurrentMonthLabel = () => {
   return new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
@@ -40,8 +47,12 @@ const getInitialState = (monthlyIncome = 4500): FinancialState => ({
     { category: Category.RENT, limit: 1200 },
     { category: Category.TRANSPORT, limit: 200 },
   ],
+  goals: [],
   reminders: [],
   monthlyIncome,
+  incomeSources: [
+    { id: 'primary', name: 'Primary Yield', amount: monthlyIncome }
+  ],
   currency: Currency.USD,
   theme: 'light',
   notificationPreferences: {
@@ -52,46 +63,37 @@ const getInitialState = (monthlyIncome = 4500): FinancialState => ({
   },
   incomeHistory: [
     { month: getCurrentMonthLabel(), amount: monthlyIncome },
-  ]
+  ],
+  alarsAutonomy: false
 });
 
 const App: React.FC = () => {
+  const [showSplash, setShowSplash] = useState(true);
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('sb_current_user');
     return saved ? JSON.parse(saved) : null;
   });
 
   const [state, setState] = useState<FinancialState>(() => getInitialState());
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
-  // Load user specific data when user changes
   useEffect(() => {
     if (user) {
       const savedData = localStorage.getItem(`sb_data_${user.id}`);
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (!parsed.reminders) parsed.reminders = [];
-        if (!parsed.notificationPreferences) {
-          parsed.notificationPreferences = {
-            weeklyReports: true,
-            budgetThresholds: true,
-            aiInsights: true,
-            securityAlerts: true
-          };
-        }
+        if (!parsed.goals) parsed.goals = [];
+        if (!parsed.incomeSources) parsed.incomeSources = [{ id: 'primary', name: 'Primary Yield', amount: parsed.monthlyIncome }];
+        if (parsed.alarsAutonomy === undefined) parsed.alarsAutonomy = false;
         setState(parsed);
-      } else {
-        // App will handle the initial state merge in handleAuthSuccess if coming from smart setup
       }
     }
   }, [user]);
 
-  // Persist data when state changes
   useEffect(() => {
     if (user && state) {
       localStorage.setItem(`sb_data_${user.id}`, JSON.stringify(state));
-      // Apply theme class globally
       if (state.theme === 'dark') {
         document.documentElement.classList.add('dark');
       } else {
@@ -108,58 +110,49 @@ const App: React.FC = () => {
     }, 4000);
   }, []);
 
-  // Reminder Sentinel Check Logic
+  // Neural Sentinel Surveillance
   useEffect(() => {
-    if (!user || state.reminders.length === 0) return;
+    if (!user) return;
+    const interval = setInterval(() => {
+      setState(prev => {
+        let hasChange = false;
+        const now = new Date();
+        const currentMonthStr = `${now.getFullYear()}-${now.getMonth() + 1}`;
+        const currentDay = now.getDate();
 
-    const checkReminders = () => {
-      let updatedReminders = [...state.reminders];
-      let hasChange = false;
-
-      updatedReminders.forEach((reminder, index) => {
-        if (reminder.triggered) return;
-
-        if (reminder.type === 'budget_threshold') {
-          const budget = state.budgets.find(b => b.category === reminder.category);
-          if (budget && budget.limit > 0) {
-            const spent = state.expenses
-              .filter(e => e.category === reminder.category)
-              .reduce((sum, e) => sum + e.amount, 0);
-            
-            const percentageUsed = (spent / budget.limit) * 100;
-            if (percentageUsed >= (reminder.threshold || 0)) {
-              notify(`Sentinel Alert: ${reminder.category} budget reached ${reminder.threshold}%`, 'warning');
-              updatedReminders[index] = { ...reminder, triggered: true };
+        const updatedReminders = prev.reminders.map(reminder => {
+          // Recurring Logic
+          if (reminder.isRecurring && reminder.dayOfMonth === currentDay) {
+            if (reminder.lastTriggeredMonth !== currentMonthStr) {
+              notify(`Recurring Sentinel: ${reminder.title} processed for ${currentMonthStr}`, 'info');
               hasChange = true;
+              return { ...reminder, lastTriggeredMonth: currentMonthStr, triggered: true };
             }
           }
-        } else if (reminder.type === 'upcoming_expense' && reminder.dueDate) {
-          const due = new Date(reminder.dueDate);
-          const now = new Date();
-          if (due.toDateString() === now.toDateString() || due < now) {
-            notify(`Sentinel Alert: Upcoming outflow "${reminder.title}" is due.`, 'info');
-            updatedReminders[index] = { ...reminder, triggered: true };
-            hasChange = true;
+
+          // Budget Threshold logic
+          if (reminder.type === 'budget_threshold' && !reminder.triggered) {
+            const budget = prev.budgets.find(b => b.category === reminder.category);
+            const spent = prev.expenses.filter(e => e.category === reminder.category).reduce((s, e) => s + e.amount, 0);
+            if (budget && (spent / budget.limit) * 100 >= (reminder.threshold || 100)) {
+              notify(`Ceiling Breached: ${reminder.category} at ${reminder.threshold}%`, 'warning');
+              hasChange = true;
+              return { ...reminder, triggered: true };
+            }
           }
-        }
+          return reminder;
+        });
+
+        return hasChange ? { ...prev, reminders: updatedReminders } : prev;
       });
-
-      if (hasChange) {
-        setState(prev => ({ ...prev, reminders: updatedReminders }));
-      }
-    };
-
-    const interval = setInterval(checkReminders, 60000);
-    checkReminders();
-
+    }, 30000);
     return () => clearInterval(interval);
-  }, [state.expenses, state.budgets, state.reminders, user, notify]);
+  }, [user, notify]);
 
   const handleAuthSuccess = (authenticatedUser: User, initialData?: Partial<FinancialState>) => {
     if (initialData) {
       const mergedState = { ...getInitialState(initialData.monthlyIncome), ...initialData };
       setState(mergedState as FinancialState);
-      localStorage.setItem(`sb_data_${authenticatedUser.id}`, JSON.stringify(mergedState));
     }
     setUser(authenticatedUser);
     localStorage.setItem('sb_current_user', JSON.stringify(authenticatedUser));
@@ -168,287 +161,178 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('sb_current_user');
-    notify('Logged out successfully', 'info');
   };
 
   const formatMoney = useCallback((amount: number) => {
-    const locales: Record<Currency, string> = {
-      [Currency.USD]: 'en-US',
-      [Currency.EUR]: 'de-DE',
-      [Currency.ZAR]: 'en-ZA',
-      [Currency.GBP]: 'en-GB',
-      [Currency.JPY]: 'ja-JP'
-    };
-
-    return new Intl.NumberFormat(locales[state.currency] || 'en-US', {
-      style: 'currency',
+    const locale = getCurrencyLocale(state.currency);
+    return new Intl.NumberFormat(locale, {
+      style: 'currency', 
       currency: state.currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
     }).format(amount);
   }, [state.currency]);
 
   const addExpense = (expense: Expense) => {
-    const budget = state.budgets.find(b => b.category === expense.category);
-    if (budget) {
-      const currentSpent = state.expenses
-        .filter(e => e.category === expense.category)
-        .reduce((sum, e) => sum + e.amount, 0);
-      
-      const totalNew = currentSpent + expense.amount;
-      if (totalNew > budget.limit) {
-        notify(`Budget exceeded for ${expense.category}! (${formatMoney(totalNew)} > ${formatMoney(budget.limit)})`, 'warning');
-      } else {
-        notify(`Logged: ${expense.description} (${formatMoney(expense.amount)})`, 'success');
-      }
-    } else {
-      notify(`Expense added to ${expense.category}`, 'success');
-    }
-
-    setState(prev => ({
-      ...prev,
-      expenses: [expense, ...prev.expenses]
-    }));
+    setState(prev => ({ ...prev, expenses: [expense, ...prev.expenses] }));
+    notify(`Capital outflow logged`, 'success');
   };
 
-  const deleteExpense = (id: string) => {
-    notify('Expense record deleted', 'info');
+  const addGoal = (goal: Goal) => {
+    setState(prev => ({ ...prev, goals: [goal, ...prev.goals] }));
+    notify(`Objective initialized`, 'success');
+  };
+
+  const updateGoalProgress = (goalId: string, amount: number) => {
     setState(prev => ({
       ...prev,
-      expenses: prev.expenses.filter(e => e.id !== id)
+      goals: prev.goals.map(g => g.id === goalId ? { ...g, currentAmount: g.currentAmount + amount } : g),
+      expenses: [{
+        id: Math.random().toString(36).substr(2, 9),
+        amount,
+        category: Category.SAVINGS,
+        description: `Goal Funding: ${prev.goals.find(g => g.id === goalId)?.name}`,
+        date: new Date().toISOString()
+      }, ...prev.expenses]
     }));
+    notify(`Capital allocated`, 'success');
+  };
+
+  const deleteGoal = (id: string) => {
+    setState(prev => ({ ...prev, goals: prev.goals.filter(g => g.id !== id) }));
+    notify(`Objective neutralized`, 'info');
   };
 
   const updateBudget = (category: Category, limit: number) => {
-    notify(`${category} budget set to ${formatMoney(limit)}`, 'success');
-    setState(prev => {
-      const existing = prev.budgets.find(b => b.category === category);
-      if (existing) {
-        return {
-          ...prev,
-          budgets: prev.budgets.map(b => b.category === category ? { ...b, limit } : b)
-        };
-      }
-      return {
-        ...prev,
-        budgets: [...prev.budgets, { category, limit }]
-      };
-    });
-  };
-
-  const addReminder = (reminder: Reminder) => {
-    notify(`Sentinel "${reminder.title}" deployed`, 'success');
     setState(prev => ({
       ...prev,
-      reminders: [reminder, ...prev.reminders]
+      budgets: prev.budgets.some(b => b.category === category) 
+        ? prev.budgets.map(b => b.category === category ? { ...b, limit } : b)
+        : [...prev.budgets, { category, limit }]
     }));
+    notify(`${category} budget updated`, 'success');
   };
 
-  const deleteReminder = (id: string) => {
-    notify('Sentinel decommissioned', 'info');
-    setState(prev => ({
-      ...prev,
-      reminders: prev.reminders.filter(r => r.id !== id)
-    }));
-  };
-
-  const updateIncome = (income: number) => {
-    notify('Monthly yield projections updated', 'success');
+  const updateIncome = (amount: number) => {
     setState(prev => {
-      const currentMonth = getCurrentMonthLabel();
-      const updatedHistory = [...prev.incomeHistory];
-      const existingEntryIndex = updatedHistory.findIndex(entry => entry.month === currentMonth);
-
-      if (existingEntryIndex !== -1) {
-        updatedHistory[existingEntryIndex] = { ...updatedHistory[existingEntryIndex], amount: income };
-      } else {
-        updatedHistory.push({ month: currentMonth, amount: income });
-        if (updatedHistory.length > 12) updatedHistory.shift();
-      }
-
+      // Manual income edit replaces sources with a single primary source
+      const newTotal = amount;
       return {
         ...prev,
-        monthlyIncome: income,
-        incomeHistory: updatedHistory
+        monthlyIncome: newTotal,
+        incomeSources: [{ id: 'primary', name: 'Primary Yield', amount: newTotal }],
+        incomeHistory: prev.incomeHistory.map(h => 
+          h.month === getCurrentMonthLabel() ? { ...h, amount: newTotal } : h
+        )
       };
     });
+    notify(`Monthly yield synchronized to ${amount}`, 'success');
   };
 
-  const updateCurrency = (currency: Currency) => {
-    notify(`Base currency initialized: ${currency}`, 'info');
-    setState(prev => ({ ...prev, currency }));
+  const addIncomeSource = (source: IncomeSource) => {
+    setState(prev => {
+      const newSources = [...prev.incomeSources, source];
+      const newTotal = newSources.reduce((s, src) => s + src.amount, 0);
+      return {
+        ...prev,
+        incomeSources: newSources,
+        monthlyIncome: newTotal,
+        incomeHistory: prev.incomeHistory.map(h => 
+          h.month === getCurrentMonthLabel() ? { ...h, amount: newTotal } : h
+        )
+      };
+    });
+    notify(`New yield source deployed: ${source.name}`, 'success');
   };
 
-  const updateTheme = (theme: Theme) => {
-    notify(`Interface adjusted to ${theme} mode`, 'info');
-    setState(prev => ({ ...prev, theme }));
+  const deleteIncomeSource = (id: string) => {
+    setState(prev => {
+      const newSources = prev.incomeSources.filter(s => s.id !== id);
+      const newTotal = newSources.reduce((s, src) => s + src.amount, 0);
+      return {
+        ...prev,
+        incomeSources: newSources,
+        monthlyIncome: newTotal,
+        incomeHistory: prev.incomeHistory.map(h => 
+          h.month === getCurrentMonthLabel() ? { ...h, amount: newTotal } : h
+        )
+      };
+    });
+    notify(`Yield source neutralized`, 'info');
   };
 
-  const updateNotificationPreferences = (prefs: NotificationPreferences) => {
-    notify('Notification preferences synchronized', 'success');
-    setState(prev => ({ ...prev, notificationPreferences: prefs }));
+  const addReminder = (r: Reminder) => {
+    setState(prev => ({...prev, reminders: [r, ...prev.reminders]}));
+    notify(`Sentinel deployed`, 'success');
+  };
+
+  const updateUserName = (newName: string) => {
+    if (!user) return;
+    const updatedUser = { ...user, name: newName };
+    setUser(updatedUser);
+    localStorage.setItem('sb_current_user', JSON.stringify(updatedUser));
+    notify('Identity label updated', 'success');
   };
 
   const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: string }) => {
     const location = useLocation();
     const isActive = location.pathname === to;
     return (
-      <Link
-        to={to}
-        onClick={() => setIsMobileMenuOpen(false)}
-        className={`group relative flex items-center space-x-3 px-5 py-3.5 rounded-2xl transition-all duration-300 ${
-          isActive 
-            ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-indigo-900/40' 
-            : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-100'
-        }`}
-      >
-        <Icon size={20} className={isActive ? 'text-white' : 'group-hover:text-indigo-600 transition-colors'} />
+      <Link to={to} className={`flex items-center space-x-3 px-5 py-3.5 rounded-2xl transition-all ${isActive ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'}`}>
+        <Icon size={20} />
         <span className="font-semibold text-sm">{label}</span>
-        {isActive && (
-          <div className="absolute right-3">
-             <ChevronRight size={14} className="opacity-50" />
-          </div>
-        )}
       </Link>
     );
   };
 
-  if (!user) {
-    return (
-      <>
-        <div className="fixed top-6 right-6 z-[100] space-y-4 pointer-events-none">
-          {notifications.map(n => (
-            <div key={n.id} className="pointer-events-auto flex items-center space-x-4 px-5 py-4 rounded-3xl shadow-2xl border-2 animate-slideInRight bg-white dark:bg-slate-900 border-indigo-500/10 min-w-[320px]">
-              <span className="text-sm font-bold flex-1">{n.message}</span>
-            </div>
-          ))}
-        </div>
-        <Auth onAuthSuccess={handleAuthSuccess} notify={notify} />
-      </>
-    );
-  }
+  if (showSplash) return <SplashScreen onComplete={() => setShowSplash(false)} />;
+
+  if (!user) return <Auth onAuthSuccess={handleAuthSuccess} notify={notify} />;
 
   return (
     <HashRouter>
-      <div className="flex flex-col lg:flex-row min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
+      <div className="flex flex-col lg:flex-row min-h-screen bg-slate-50 dark:bg-slate-950">
         <div className="fixed top-6 right-6 z-[100] space-y-4 pointer-events-none">
           {notifications.map(n => (
-            <div 
-              key={n.id} 
-              className={`pointer-events-auto flex items-center space-x-4 px-5 py-4 rounded-3xl shadow-2xl border-2 animate-slideInRight min-w-[320px] ${
-                n.type === 'success' ? 'bg-white dark:bg-slate-900 border-emerald-500/10 text-emerald-900 dark:text-emerald-50' :
-                n.type === 'warning' ? 'bg-white dark:bg-slate-900 border-amber-500/10 text-amber-900 dark:text-amber-50' :
-                n.type === 'error' ? 'bg-white dark:bg-slate-900 border-rose-500/10 text-rose-900 dark:text-rose-50' :
-                'bg-white dark:bg-slate-900 border-indigo-500/10 text-indigo-900 dark:text-indigo-50'
-              }`}
-            >
-              <div className={`p-2 rounded-xl ${
-                n.type === 'success' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' :
-                n.type === 'warning' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' :
-                n.type === 'error' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400' :
-                'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'
-              }`}>
-                {n.type === 'success' && <CheckCircle2 size={20} />}
-                {n.type === 'warning' && <AlertTriangle size={20} />}
-                {n.type === 'error' && <AlertCircle size={20} />}
-                {n.type === 'info' && <Info size={20} />}
-              </div>
-              <span className="text-sm font-bold flex-1">{n.message}</span>
-              <button 
-                onClick={() => setNotifications(prev => prev.filter(item => item.id !== n.id))}
-                className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              >
-                <X size={16} className="text-slate-400" />
-              </button>
+            <div key={n.id} className="pointer-events-auto flex items-center space-x-4 px-5 py-4 rounded-3xl shadow-2xl bg-white dark:bg-slate-900 border-2 border-indigo-500/10 animate-slideUp">
+              <span className="text-sm font-bold">{n.message}</span>
             </div>
           ))}
         </div>
 
-        <aside className="hidden lg:flex flex-col w-80 glass border-r border-slate-200/50 dark:border-slate-800/50 p-8 space-y-10 sticky top-0 h-screen z-10 transition-colors">
-          <div className="flex items-center space-x-3.5 group cursor-pointer">
-            <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 p-2.5 rounded-2xl shadow-lg shadow-indigo-200 dark:shadow-indigo-900/20 group-hover:scale-110 transition-transform">
-              <Wallet className="text-white" size={26} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight leading-none">SmartBudgets</h1>
-              <span className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400">AI Assistant</span>
-            </div>
-          </div>
-          
-          <nav className="flex-1 space-y-2.5">
+        <aside className="hidden lg:flex flex-col w-80 glass border-r dark:border-slate-800 p-8 space-y-10 sticky top-0 h-screen">
+          <Logo size={48} layout="horizontal" />
+          <nav className="flex-1 space-y-2">
             <NavItem to="/" icon={LayoutDashboard} label="Dashboard" />
+            <NavItem to="/goals" icon={Target} label="Objectives" />
             <NavItem to="/budgets" icon={PieChart} label="Budgets" />
-            <NavItem to="/expenses" icon={PlusCircle} label="Expenses" />
-            <NavItem to="/sentinels" icon={Bell} label="Reminders" />
-            <NavItem to="/advisor" icon={Sparkles} label="AI Advisor" />
-            <NavItem to="/settings" icon={SettingsIcon} label="Settings" />
+            <NavItem to="/expenses" icon={PlusCircle} label="Ledger" />
+            <NavItem to="/sentinels" icon={Bell} label="Sentinels" />
+            <NavItem to="/alars" icon={Zap} label="ALARS Core" />
+            <NavItem to="/settings" icon={SettingsIcon} label="Config" />
           </nav>
-
-          <div className="pt-8 space-y-4 border-t border-slate-100 dark:border-slate-800">
-            <div className="flex items-center space-x-3 p-2">
-              <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700">
-                <UserIcon size={18} className="text-indigo-600 dark:text-indigo-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-black text-slate-900 dark:text-white truncate">{user.name}</p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{user.email}</p>
-              </div>
+          <div className="pt-8 border-t dark:border-slate-800 space-y-4">
+            <div className="flex items-center space-x-3">
+               <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-indigo-600">{user.name[0]}</div>
+               <div className="flex-1 overflow-hidden">
+                 <p className="text-sm font-black truncate dark:text-white">{user.name}</p>
+                 <p className="text-[10px] text-slate-400 truncate">{user.email}</p>
+               </div>
             </div>
-
-            <button 
-              onClick={handleLogout}
-              className="w-full flex items-center space-x-3 px-5 py-3.5 rounded-2xl text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-rose-950/20 dark:hover:text-rose-400 transition-all font-semibold text-sm"
-            >
-              <LogOut size={20} />
-              <span>Logout</span>
+            <button onClick={handleLogout} className="w-full flex items-center space-x-3 px-5 py-3 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-xl font-bold transition-all">
+              <LogOut size={18} /><span>Sign Out</span>
             </button>
           </div>
         </aside>
 
-        <header className="lg:hidden glass border-b border-slate-200/50 dark:border-slate-800/50 p-5 sticky top-0 z-50 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="bg-indigo-600 p-1.5 rounded-xl shadow-lg">
-              <Wallet className="text-white" size={20} />
-            </div>
-            <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">SmartBudgets</span>
-          </div>
-          <button 
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 text-slate-500 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800"
-          >
-            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
-        </header>
-
-        {isMobileMenuOpen && (
-          <div className="lg:hidden fixed inset-0 z-40 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md pt-24 px-8 animate-fadeIn">
-            <nav className="space-y-4">
-              <NavItem to="/" icon={LayoutDashboard} label="Dashboard" />
-              <NavItem to="/budgets" icon={PieChart} label="Budgets" />
-              <NavItem to="/expenses" icon={PlusCircle} label="Expenses" />
-              <NavItem to="/sentinels" icon={Bell} label="Reminders" />
-              <NavItem to="/advisor" icon={Sparkles} label="AI Advisor" />
-              <NavItem to="/settings" icon={SettingsIcon} label="Settings" />
-              <button 
-                onClick={handleLogout}
-                className="w-full flex items-center space-x-3 px-5 py-3.5 rounded-2xl text-rose-600 font-semibold"
-              >
-                <LogOut size={20} />
-                <span>Logout</span>
-              </button>
-            </nav>
-          </div>
-        )}
-
-        <main className="flex-1 p-6 lg:p-12 overflow-y-auto transition-colors no-scrollbar">
-          <div className="max-w-6xl mx-auto space-y-12">
+        <main className="flex-1 p-6 lg:p-12 overflow-y-auto">
+          <div className="max-w-6xl mx-auto">
             <Routes>
               <Route path="/" element={<Dashboard state={state} formatMoney={formatMoney} />} />
+              <Route path="/goals" element={<GoalTracker state={state} addGoal={addGoal} updateProgress={updateGoalProgress} deleteGoal={deleteGoal} formatMoney={formatMoney} />} />
               <Route path="/budgets" element={<BudgetManager state={state} updateBudget={updateBudget} formatMoney={formatMoney} />} />
-              <Route path="/expenses" element={<ExpenseTracker state={state} addExpense={addExpense} deleteExpense={deleteExpense} formatMoney={formatMoney} />} />
-              <Route path="/sentinels" element={<ReminderManager state={state} addReminder={addReminder} deleteReminder={deleteReminder} formatMoney={formatMoney} />} />
-              <Route path="/advisor" element={<GeminiAdvisor state={state} notify={notify} />} />
-              <Route path="/settings" element={<Settings state={state} updateIncome={updateIncome} updateCurrency={updateCurrency} updateTheme={updateTheme} updateNotificationPreferences={updateNotificationPreferences} />} />
+              <Route path="/expenses" element={<ExpenseTracker state={state} addExpense={addExpense} deleteExpense={(id) => setState(prev => ({ ...prev, expenses: prev.expenses.filter(e => e.id !== id)}))} formatMoney={formatMoney} />} />
+              <Route path="/sentinels" element={<ReminderManager state={state} addReminder={addReminder} deleteReminder={(id) => setState(prev => ({...prev, reminders: prev.reminders.filter(rem => rem.id !== id)}))} formatMoney={formatMoney} />} />
+              <Route path="/alars" element={<ALARSAdvisor state={state} notify={notify} updateBudget={updateBudget} updateIncome={updateIncome} addIncomeSource={addIncomeSource} deleteIncomeSource={deleteIncomeSource} addGoal={addGoal} deleteGoal={deleteGoal} addReminder={addReminder} deleteReminder={(id) => setState(prev => ({...prev, reminders: prev.reminders.filter(rem => rem.id !== id)}))} />} />
+              <Route path="/settings" element={<Settings state={state} updateIncome={updateIncome} addIncomeSource={addIncomeSource} deleteIncomeSource={deleteIncomeSource} updateCurrency={(currency) => setState(prev => ({...prev, currency}))} updateTheme={(theme) => setState(prev => ({...prev, theme}))} updateNotificationPreferences={(p) => setState(prev => ({...prev, notificationPreferences: p}))} updateUserName={updateUserName} updateBudget={updateBudget} updateAlarsAutonomy={(a) => setState(prev => ({...prev, alarsAutonomy: a}))} formatMoney={formatMoney} />} />
             </Routes>
           </div>
         </main>
