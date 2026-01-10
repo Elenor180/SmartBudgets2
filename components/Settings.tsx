@@ -1,10 +1,10 @@
-
 import React, { useState } from 'react';
-import { User as UserIcon, Wallet, Globe, ShieldCheck, Lock, ArrowRight, Check, Moon, Sun, Palette, Mail, Bell, PieChart, Sparkles, Shield, Cpu, Target, Zap, Trash2, Plus, DollarSign } from 'lucide-react';
-import { FinancialState, Currency, Theme, NotificationPreferences, Category, IncomeSource } from '../types';
+import { User as UserIcon, Wallet, Globe, ShieldCheck, Lock, ArrowRight, Check, Moon, Sun, Palette, Mail, Bell, PieChart, Sparkles, Shield, Cpu, Target, Zap, Trash2, Plus, DollarSign, ExternalLink, ShieldAlert } from 'lucide-react';
+import { FinancialState, Currency, Theme, NotificationPreferences, Category, IncomeSource, User, SubscriptionTier } from '../types';
 
 interface Props {
   state: FinancialState;
+  user: User;
   updateIncome: (income: number) => void;
   addIncomeSource: (source: IncomeSource) => void;
   deleteIncomeSource: (id: string) => void;
@@ -15,20 +15,20 @@ interface Props {
   updateBudget: (category: Category, limit: number) => void;
   updateAlarsAutonomy: (autonomy: boolean) => void;
   formatMoney: (amount: number) => string;
+  onUpgradeClick: () => void;
 }
 
 const Settings: React.FC<Props> = ({ 
-  state, updateIncome, addIncomeSource, deleteIncomeSource, updateCurrency, updateTheme, 
-  updateNotificationPreferences, updateUserName, updateBudget, updateAlarsAutonomy, formatMoney 
+  state, user, updateIncome, addIncomeSource, deleteIncomeSource, updateCurrency, updateTheme, 
+  updateNotificationPreferences, updateUserName, updateAlarsAutonomy, formatMoney, onUpgradeClick 
 }) => {
-  const [displayName, setDisplayName] = useState(() => {
-    const user = JSON.parse(localStorage.getItem('sb_current_user') || '{}');
-    return user.name || '';
-  });
+  const [displayName, setDisplayName] = useState(user.name);
   const [incomeTotal, setIncomeTotal] = useState(state.monthlyIncome.toString());
   const [newSourceName, setNewSourceName] = useState('');
   const [newSourceAmount, setNewSourceAmount] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
+
+  const isFree = user.subscription.tier === SubscriptionTier.FREE;
 
   const handleGlobalSync = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,30 +52,71 @@ const Settings: React.FC<Props> = ({
     setNewSourceAmount('');
   };
 
-  const PreferenceToggle = ({ label, icon: Icon, active, onToggle, danger }: { label: string, icon: any, active: boolean, onToggle: () => void, danger?: boolean }) => (
-    <div className="flex items-center justify-between py-5 border-b dark:border-slate-800 last:border-0">
+  const PreferenceToggle = ({ label, icon: Icon, active, onToggle, danger, locked }: { label: string, icon: any, active: boolean, onToggle: () => void, danger?: boolean, locked?: boolean }) => (
+    <div className={`flex items-center justify-between py-5 border-b dark:border-slate-800 last:border-0 ${locked ? 'opacity-50' : ''}`}>
       <div className="flex items-center space-x-4">
-        <div className={`p-3 rounded-2xl ${active ? (danger ? 'bg-rose-600' : 'bg-indigo-600') : 'bg-slate-100 dark:bg-slate-800'} text-white`}><Icon size={18} /></div>
+        <div className={`p-3 rounded-2xl ${active ? (danger ? 'bg-rose-600' : 'bg-indigo-600') : 'bg-slate-100 dark:bg-slate-800'} text-white relative`}>
+          <Icon size={18} />
+          {locked && <Lock size={10} className="absolute -top-1 -right-1 text-rose-500 bg-white dark:bg-slate-900 rounded-full" />}
+        </div>
         <div className="flex flex-col">
           <span className="text-sm font-black dark:text-white uppercase tracking-tight">{label}</span>
           {danger && <span className="text-[10px] font-bold text-rose-500 uppercase tracking-widest mt-0.5">Autonomous Control Mode</span>}
+          {locked && <span className="text-[9px] font-black text-rose-500 uppercase mt-0.5">Premium Feature</span>}
         </div>
       </div>
-      <button onClick={onToggle} className={`h-8 w-14 rounded-full transition-all relative ${active ? (danger ? 'bg-rose-600' : 'bg-indigo-600') : 'bg-slate-200 dark:bg-slate-700 shadow-inner'}`}>
+      <button 
+        onClick={locked ? onUpgradeClick : onToggle} 
+        className={`h-8 w-14 rounded-full transition-all relative ${active ? (danger ? 'bg-rose-600' : 'bg-indigo-600') : 'bg-slate-200 dark:bg-slate-700 shadow-inner'}`}
+      >
         <div className={`h-6 w-6 bg-white rounded-full absolute top-1 transition-all shadow-md ${active ? 'left-7' : 'left-1'}`} />
       </button>
     </div>
   );
 
   return (
-    <div className="space-y-12 animate-fadeIn max-w-5xl pb-12">
-      <header>
-        <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">Configuration</h2>
-        <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Calibrate your neural profile and system-wide parameters.</p>
+    <div className="space-y-12 animate-fade-in max-w-5xl pb-12">
+      <header className="flex justify-between items-end border-b border-white/5 pb-8">
+        <div>
+          <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter glow-text-neon">Configuration</h2>
+          <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Calibrate your neural profile and system-wide parameters.</p>
+        </div>
+        <div className="flex flex-col items-end">
+           <span className="mono text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">Active License</span>
+           <div className={`px-6 py-2 rounded-full font-black text-[10px] uppercase tracking-widest flex items-center space-x-2 ${isFree ? 'bg-rose-500/10 border border-rose-500/30 text-rose-500' : 'bg-indigo-600 text-white'}`}>
+             <span>{user.subscription.tier} PROTOCOL</span>
+           </div>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
         <div className="lg:col-span-2 space-y-10">
+          
+          {/* Licensing Management */}
+          <section className="glass-panel p-10 rounded-[3rem] border-l-4 border-indigo-600">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center space-x-4">
+                <div className="bg-indigo-600/10 p-3 rounded-2xl text-indigo-400"><ShieldCheck size={24} /></div>
+                <h3 className="text-2xl font-black dark:text-white">Neural Licensing</h3>
+              </div>
+              <button onClick={onUpgradeClick} className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center space-x-2 hover:underline">
+                <span>Manage Billing</span>
+                <ExternalLink size={12} />
+              </button>
+            </div>
+            <div className="bg-white/5 p-6 rounded-[2rem] flex items-center justify-between">
+               <div>
+                  <p className="text-white font-black">{isFree ? 'Standard Access' : 'Full ALARS Authorization'}</p>
+                  <p className="text-slate-500 text-xs font-medium mt-1">{isFree ? '10 daily prompts remaining today.' : 'Unlimited neural processing active.'}</p>
+               </div>
+               {isFree && (
+                 <button onClick={onUpgradeClick} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-xl">
+                   Upgrade Now
+                 </button>
+               )}
+            </div>
+          </section>
+
           {/* Neural Assistant Mode */}
           <section className="bg-slate-900 text-white p-10 rounded-[3rem] shadow-2xl border border-slate-800 relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-10 opacity-10 group-hover:scale-110 transition-transform">
@@ -93,59 +134,8 @@ const Settings: React.FC<Props> = ({
                 active={state.alarsAutonomy} 
                 onToggle={() => updateAlarsAutonomy(!state.alarsAutonomy)} 
                 danger
+                locked={isFree}
               />
-            </div>
-          </section>
-
-          {/* Yield Management Section */}
-          <section className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-            <div className="flex items-center space-x-4 mb-10 border-b dark:border-slate-800 pb-8">
-              <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-xl">
-                 <DollarSign className="text-emerald-600" />
-              </div>
-              <h3 className="text-2xl font-black dark:text-white">Yield Streams</h3>
-            </div>
-            
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {state.incomeSources.map(source => (
-                  <div key={source.id} className="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800 group">
-                    <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{source.name}</p>
-                      <p className="text-lg font-black text-slate-900 dark:text-white">{formatMoney(source.amount)}</p>
-                    </div>
-                    <button onClick={() => deleteIncomeSource(source.id)} className="p-3 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100">
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <form onSubmit={handleAddSource} className="grid grid-cols-1 sm:grid-cols-12 gap-4 bg-slate-100/50 dark:bg-slate-800/50 p-6 rounded-[2rem]">
-                <div className="sm:col-span-6">
-                  <input 
-                    type="text" 
-                    value={newSourceName} 
-                    onChange={e => setNewSourceName(e.target.value)}
-                    placeholder="Source Label (e.g. Freelance)" 
-                    className="w-full px-5 py-3 rounded-xl bg-white border border-slate-200 dark:border-slate-700 font-bold text-black outline-none"
-                  />
-                </div>
-                <div className="sm:col-span-4">
-                  <input 
-                    type="number" 
-                    value={newSourceAmount} 
-                    onChange={e => setNewSourceAmount(e.target.value)}
-                    placeholder="Amount" 
-                    className="w-full px-5 py-3 rounded-xl bg-white border border-slate-200 dark:border-slate-700 font-bold text-black outline-none"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <button type="submit" className="w-full h-full bg-indigo-600 text-white rounded-xl flex items-center justify-center hover:bg-indigo-700 transition-all">
-                    <Plus size={24} />
-                  </button>
-                </div>
-              </form>
             </div>
           </section>
 
@@ -161,13 +151,6 @@ const Settings: React.FC<Props> = ({
                 <div className="relative">
                   <UserIcon className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input value={displayName} onChange={e => setDisplayName(e.target.value)} className="w-full pl-14 pr-4 py-5 rounded-[1.5rem] bg-white border dark:border-slate-800 outline-none font-bold text-black" />
-                </div>
-              </div>
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Total Yield Sync (Override)</label>
-                <div className="relative">
-                  <Wallet className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input type="number" value={incomeTotal} onChange={e => setIncomeTotal(e.target.value)} className="w-full pl-14 pr-4 py-5 rounded-[1.5rem] bg-white border dark:border-slate-800 outline-none font-bold text-black" />
                 </div>
               </div>
               <div className="space-y-3">

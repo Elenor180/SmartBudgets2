@@ -1,4 +1,3 @@
-
 export enum Category {
   FOOD = 'Food',
   RENT = 'Rent',
@@ -8,6 +7,7 @@ export enum Category {
   SAVINGS = 'Savings',
   HEALTH = 'Health',
   SHOPPING = 'Shopping',
+  INSURANCE = 'Insurance',
   OTHERS = 'Others'
 }
 
@@ -19,12 +19,49 @@ export enum Currency {
   JPY = 'JPY'
 }
 
+export enum SubscriptionTier {
+  FREE = 'FREE',
+  MONTHLY = 'MONTHLY',
+  YEARLY = 'YEARLY'
+}
+
+export type PaymentMethod = 'EFT' | 'CARD' | 'PAYPAL' | 'STRIPE';
+
+export interface SubscriptionInfo {
+  tier: SubscriptionTier;
+  expiryDate?: string;
+  autoRenew: boolean;
+  paymentMethod?: PaymentMethod;
+}
+
 export type Theme = 'light' | 'dark';
+
+export interface SMTPConfig {
+  host: string;
+  port: number;
+  username: string;
+  appPassword: string;
+}
+
+export interface OwnerConfig {
+  ownerEmail: string;
+  vaultPassword: string;
+  bankName: string;
+  accountHolder: string;
+  accountNumber: string;
+  branchCode: string;
+  stripePublicKey: string;
+  paypalEmail: string;
+  lastUpdated: string;
+  smtpConfig: SMTPConfig;
+}
 
 export interface User {
   id: string;
   email: string;
   name: string;
+  subscription: SubscriptionInfo;
+  isAdmin?: boolean;
 }
 
 export interface Expense {
@@ -97,6 +134,8 @@ export interface FinancialState {
   theme: Theme;
   notificationPreferences: NotificationPreferences;
   alarsAutonomy: boolean;
+  alarsDailyPromptsUsed: number;
+  alarsLastPromptDate: string; // YYYY-MM-DD
 }
 
 export type NotificationType = 'success' | 'error' | 'warning' | 'info';
