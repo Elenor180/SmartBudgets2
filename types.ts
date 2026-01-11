@@ -1,3 +1,4 @@
+
 export enum Category {
   FOOD = 'Food',
   RENT = 'Rent',
@@ -93,9 +94,11 @@ export interface IncomeSource {
   amount: number;
 }
 
+// Added expenses property to IncomeRecord to track monthly spending in history
 export interface IncomeRecord {
   month: string;
   amount: number;
+  expenses: number;
 }
 
 export type ReminderType = 'budget_threshold' | 'upcoming_expense' | 'goal_milestone' | 'recurring_debit';
@@ -122,12 +125,14 @@ export interface NotificationPreferences {
   securityAlerts: boolean;
 }
 
+// Added overallLimit to track global spending ceiling in the core state
 export interface FinancialState {
   expenses: Expense[];
   budgets: Budget[];
   goals: Goal[];
   reminders: Reminder[];
   monthlyIncome: number;
+  overallLimit: number;
   incomeSources: IncomeSource[];
   currency: Currency;
   incomeHistory: IncomeRecord[];

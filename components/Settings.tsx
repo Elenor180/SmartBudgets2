@@ -53,14 +53,14 @@ const Settings: React.FC<Props> = ({
   };
 
   const PreferenceToggle = ({ label, icon: Icon, active, onToggle, danger, locked }: { label: string, icon: any, active: boolean, onToggle: () => void, danger?: boolean, locked?: boolean }) => (
-    <div className={`flex items-center justify-between py-5 border-b dark:border-slate-800 last:border-0 ${locked ? 'opacity-50' : ''}`}>
+    <div className={`flex items-center justify-between py-5 border-b border-slate-100 dark:border-slate-800 last:border-0 ${locked ? 'opacity-50' : ''}`}>
       <div className="flex items-center space-x-4">
         <div className={`p-3 rounded-2xl ${active ? (danger ? 'bg-rose-600' : 'bg-indigo-600') : 'bg-slate-100 dark:bg-slate-800'} text-white relative`}>
           <Icon size={18} />
           {locked && <Lock size={10} className="absolute -top-1 -right-1 text-rose-500 bg-white dark:bg-slate-900 rounded-full" />}
         </div>
         <div className="flex flex-col">
-          <span className="text-sm font-black dark:text-white uppercase tracking-tight">{label}</span>
+          <span className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">{label}</span>
           {danger && <span className="text-[10px] font-bold text-rose-500 uppercase tracking-widest mt-0.5">Autonomous Control Mode</span>}
           {locked && <span className="text-[9px] font-black text-rose-500 uppercase mt-0.5">Premium Feature</span>}
         </div>
@@ -76,7 +76,7 @@ const Settings: React.FC<Props> = ({
 
   return (
     <div className="space-y-12 animate-fade-in max-w-5xl pb-12">
-      <header className="flex justify-between items-end border-b border-white/5 pb-8">
+      <header className="flex justify-between items-end border-b border-slate-200 dark:border-white/5 pb-8">
         <div>
           <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter glow-text-neon">Configuration</h2>
           <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Calibrate your neural profile and system-wide parameters.</p>
@@ -97,7 +97,7 @@ const Settings: React.FC<Props> = ({
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center space-x-4">
                 <div className="bg-indigo-600/10 p-3 rounded-2xl text-indigo-400"><ShieldCheck size={24} /></div>
-                <h3 className="text-2xl font-black dark:text-white">Neural Licensing</h3>
+                <h3 className="text-2xl font-black text-white">Neural Licensing</h3>
               </div>
               <button onClick={onUpgradeClick} className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center space-x-2 hover:underline">
                 <span>Manage Billing</span>
@@ -107,7 +107,7 @@ const Settings: React.FC<Props> = ({
             <div className="bg-white/5 p-6 rounded-[2rem] flex items-center justify-between">
                <div>
                   <p className="text-white font-black">{isFree ? 'Standard Access' : 'Full ALARS Authorization'}</p>
-                  <p className="text-slate-500 text-xs font-medium mt-1">{isFree ? '10 daily prompts remaining today.' : 'Unlimited neural processing active.'}</p>
+                  <p className="text-slate-400 text-xs font-medium mt-1">{isFree ? '10 daily prompts remaining today.' : 'Unlimited neural processing active.'}</p>
                </div>
                {isFree && (
                  <button onClick={onUpgradeClick} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-xl">
@@ -140,9 +140,9 @@ const Settings: React.FC<Props> = ({
           </section>
 
           <form onSubmit={handleGlobalSync} className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-            <div className="flex items-center space-x-4 mb-10 border-b dark:border-slate-800 pb-8">
+            <div className="flex items-center space-x-4 mb-10 border-b border-slate-100 dark:border-slate-800 pb-8">
               <Cpu className="text-indigo-600" />
-              <h3 className="text-2xl font-black dark:text-white">System Identification</h3>
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white">System Identification</h3>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -150,7 +150,7 @@ const Settings: React.FC<Props> = ({
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Display Label</label>
                 <div className="relative">
                   <UserIcon className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input value={displayName} onChange={e => setDisplayName(e.target.value)} className="w-full pl-14 pr-4 py-5 rounded-[1.5rem] bg-white border dark:border-slate-800 outline-none font-bold text-black" />
+                  <input value={displayName} onChange={e => setDisplayName(e.target.value)} className="w-full pl-14 pr-4 py-5 rounded-[1.5rem] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none font-bold text-slate-900 dark:text-white" />
                 </div>
               </div>
               <div className="space-y-3">
@@ -160,7 +160,7 @@ const Settings: React.FC<Props> = ({
                   <select 
                     value={state.currency} 
                     onChange={e => updateCurrency(e.target.value as Currency)}
-                    className="w-full pl-14 pr-4 py-5 rounded-[1.5rem] bg-white border dark:border-slate-800 outline-none font-bold text-black appearance-none"
+                    className="w-full pl-14 pr-4 py-5 rounded-[1.5rem] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none font-bold text-slate-900 dark:text-white appearance-none"
                   >
                     {Object.values(Currency).map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -168,7 +168,7 @@ const Settings: React.FC<Props> = ({
               </div>
             </div>
 
-            <div className="mt-10 pt-8 border-t dark:border-slate-800 flex items-center justify-between">
+            <div className="mt-10 pt-8 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <button type="submit" className="bg-indigo-600 text-white px-10 py-5 rounded-[2rem] font-black uppercase tracking-widest text-xs flex items-center space-x-3 hover:bg-indigo-700 transition-all active:scale-95">
                 <span>Synchronize System</span>
                 <ArrowRight size={16} />
@@ -180,11 +180,11 @@ const Settings: React.FC<Props> = ({
 
         <div className="space-y-10">
           <section className="bg-white dark:bg-slate-900 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-            <h3 className="text-xl font-black dark:text-white mb-8">Interface Engine</h3>
-            <div className="flex items-center justify-between py-5 border-b dark:border-slate-800">
+            <h3 className="text-xl font-black text-slate-900 dark:text-white mb-8">Interface Engine</h3>
+            <div className="flex items-center justify-between py-5 border-b border-slate-100 dark:border-slate-800">
               <div className="flex flex-col">
                 <span className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Theme</span>
-                <span className="text-sm font-bold dark:text-slate-200">System Visuals</span>
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">System Visuals</span>
               </div>
               <button onClick={() => updateTheme(state.theme === 'light' ? 'dark' : 'light')} className="p-4 bg-slate-100 dark:bg-slate-800 rounded-2xl text-indigo-600 hover:scale-105 transition-transform">
                 {state.theme === 'light' ? <Sun size={24} /> : <Moon size={24} />}

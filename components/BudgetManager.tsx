@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FinancialState, Category } from '../types';
 import { Save, ShieldCheck, Target, TrendingUp, AlertCircle, CheckCircle2, ChevronRight, Zap } from 'lucide-react';
 import { getCurrencySymbol } from '../services/currencyUtils';
@@ -13,6 +12,11 @@ interface Props {
 const BudgetManager: React.FC<Props> = ({ state, updateBudget, formatMoney }) => {
   const [selectedCategory, setSelectedCategory] = useState<Category>(Category.FOOD);
   const [limit, setLimit] = useState<string>('');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,39 +121,63 @@ const BudgetManager: React.FC<Props> = ({ state, updateBudget, formatMoney }) =>
                   const usage = b.limit > 0 ? (spent / b.limit) * 100 : 0;
 
                   return (
-                    <div key={b.category} className="p-12 flex flex-col sm:flex-row sm:items-center justify-between gap-8 hover:bg-white/5 transition-all group relative overflow-hidden">
+                    <div key={b.category} className="p-10 md:p-12 flex flex-col space-y-8 hover:bg-white/5 transition-all group relative overflow-hidden">
                       {/* Interactive hover glow */}
                       <div className={`absolute -right-20 top-1/2 -translate-y-1/2 w-40 h-40 rounded-full blur-[60px] opacity-0 group-hover:opacity-20 transition-opacity ${isOver ? 'bg-rose-500' : 'bg-indigo-500'}`} />
                       
-                      <div className="flex items-center space-x-8 relative z-10">
-                        <div className={`w-16 h-16 rounded-[1.75rem] flex items-center justify-center shadow-2xl transition-transform group-hover:rotate-12 ${isOver ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}`}>
-                           {isOver ? <AlertCircle size={28} /> : <CheckCircle2 size={28} />}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
+                        <div className="flex items-center space-x-8">
+                          <div className={`w-14 h-14 md:w-16 md:h-16 rounded-[1.5rem] md:rounded-[1.75rem] flex items-center justify-center shadow-2xl transition-transform group-hover:rotate-12 ${isOver ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}`}>
+                             {isOver ? <AlertCircle size={28} /> : <CheckCircle2 size={28} />}
+                          </div>
+                          <div>
+                            <h4 className="text-xl md:text-2xl font-black text-white tracking-tight leading-none mb-2">{b.category}</h4>
+                            <div className="flex items-center space-x-4">
+                               <div className="flex items-center space-x-2">
+                                  <div className={`w-1.5 h-1.5 rounded-full ${isOver ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                                  <span className="mono text-[10px] font-bold text-slate-500 uppercase tracking-widest">Protocol Segment</span>
+                               </div>
+                               {isOver && <span className="mono text-[10px] font-black text-rose-400 bg-rose-500/10 px-2 rounded uppercase animate-pulse">Critical Breach</span>}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="text-2xl font-black text-white tracking-tight leading-none mb-2">{b.category}</h4>
-                          <div className="flex items-center space-x-4">
-                             <div className="flex items-center space-x-2">
-                                <div className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-                                <span className="mono text-[10px] font-bold text-slate-500 uppercase tracking-widest">Load:</span>
-                                <span className={`mono text-[10px] font-black uppercase ${isOver ? 'text-rose-500' : 'text-emerald-500'}`}>{usage.toFixed(1)}%</span>
+
+                        <div className="flex items-center space-x-12 sm:space-x-16">
+                          <div className="text-right">
+                             <p className="mono text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Cap: {formatMoney(b.limit)}</p>
+                             <p className={`text-2xl md:text-3xl font-black tracking-tighter glow-text-neon ${isOver ? 'text-rose-500' : 'text-white'}`}>{formatMoney(spent)}</p>
+                          </div>
+                          <div className="hidden md:block">
+                             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border transition-all ${
+                               isOver ? 'bg-rose-500/10 border-rose-500/30 text-rose-500' : 'bg-white/5 border-white/10 text-slate-500 group-hover:text-indigo-400 group-hover:border-indigo-400/30'
+                             }`}>
+                               <ChevronRight size={24} />
                              </div>
-                             {isOver && <span className="mono text-[10px] font-black text-rose-400 bg-rose-500/10 px-2 rounded uppercase animate-pulse">Critical</span>}
                           </div>
                         </div>
                       </div>
-                      
-                      <div className="flex items-center space-x-16 relative z-10">
-                        <div className="text-right">
-                           <p className="mono text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Assigned Capacity</p>
-                           <p className="text-3xl font-black text-white tracking-tighter glow-text-neon">{formatMoney(b.limit)}</p>
-                        </div>
-                        <div className="hidden sm:block">
-                           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border transition-all ${
-                             isOver ? 'bg-rose-500/10 border-rose-500/30 text-rose-500' : 'bg-white/5 border-white/10 text-slate-500 group-hover:text-indigo-400 group-hover:border-indigo-400/30'
-                           }`}>
-                             <ChevronRight size={24} />
-                           </div>
-                        </div>
+
+                      {/* Animated Progress Bar */}
+                      <div className="relative w-full h-3 md:h-4 bg-white/5 rounded-full overflow-hidden shadow-inner border border-white/5">
+                        <div 
+                          className={`absolute left-0 top-0 h-full rounded-full transition-all duration-1000 cubic-bezier(0.16, 1, 0.3, 1) ${
+                            isOver ? 'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.6)] animate-pulse' : 
+                            usage > 80 ? 'bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]' : 
+                            'bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)]'
+                          }`}
+                          style={{ width: mounted ? `${Math.min(usage, 100)}%` : '0%' }}
+                        />
+                        {/* Threshold Marker at 100% */}
+                        <div className="absolute top-0 bottom-0 w-1 bg-white/10 left-full -translate-x-1"></div>
+                      </div>
+
+                      <div className="flex justify-between items-center relative z-10 px-1">
+                        <span className="mono text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                          Current Load: <span className={isOver ? 'text-rose-500' : 'text-indigo-400'}>{usage.toFixed(1)}%</span>
+                        </span>
+                        <span className="mono text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                          Residual: <span className={isOver ? 'text-rose-500' : 'text-emerald-500'}>{formatMoney(Math.max(b.limit - spent, 0))}</span>
+                        </span>
                       </div>
                     </div>
                   );
