@@ -73,7 +73,7 @@ SmartBudgets2/
 
 ---
 
-## Usage
+## Usage (locally)
 
 1. Start the server and navigate to the local host address (usually http://localhost:5000).
 2. Create an account or log in.
