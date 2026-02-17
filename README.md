@@ -75,7 +75,7 @@ SmartBudgets2/
 
 ## Usage (locally)
 
-1. Start the server and navigate to the local host address (usually http://localhost:5000).
+1. Start the server and navigate to the local host address
 2. Create an account or log in.
 3. Use the Dashboard to add your initial balance and recurring expenses.
 4. Categorize your transactions to generate accurate spending charts.
