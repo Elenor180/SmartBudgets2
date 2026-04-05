@@ -1,103 +1,80 @@
-# SmartBudgets2
+# Smart Budgets Workspace
 
-Status: Active
-License: MIT
+Smart Budgets Workspace is a Vite + React frontend for personal finance planning. The active application lives under `src/` and is now wired for Supabase-backed authentication plus persisted customer finance records.
 
-SmartBudgets2 is a comprehensive personal finance management application designed to help users track expenses, establish budgets, and gain insights into their financial health. This version improves upon the original logic to provide more robust tracking and visualization of spending habits.
+## Current scope
 
----
+- Email/password authentication with Supabase Auth
+- Customer profile creation and persisted workspace setup
+- Dashboard, transactions, budgets, goals, reminders, insights, and settings
+- Remote persistence for finance records plus JSON export/import
+- Responsive shell and chart-driven finance views
 
-## Features
+## Tech stack
 
-* Transaction Tracking: Log daily income and expenses with detailed categorization.
-* Budget Management: Set monthly or category-specific limits to control spending.
-* Data Visualization: Integrated charts to monitor spending trends over time.
-* Financial Goals: Track progress toward savings targets or debt repayment.
-* Report Generation: View summaries of monthly financial activity.
+- React 19
+- TypeScript
+- Vite
+- React Router
+- Recharts
+- Lucide React
+- Supabase Auth + Postgres
 
----
+## Getting started
 
-## Tech Stack
-
-* Frontend: React.js
-* Backend: Node.js / Express
-* Database: PostgreSQL
-* Styling: Tailwind CSS
-
----
-
-## Installation and Setup
-
-### 1. Prerequisites
-* Node.js (v18.x or higher)
-* Git
-* A package manager (npm or yarn)
-
-### 2. Clone the Repository
-git clone https://github.com/Elenor180/SmartBudgets2.git
-cd SmartBudgets2
-
-### 3. Install Dependencies
+```bash
 npm install
-
-### 4. Environment Configuration
-Create a .env file in the root directory and add the following variables:
-PORT=5000
-DATABASE_URL=your_postgresql_connection_string
-JWT_SECRET=your_jwt_secret_key
-
-### 5. Run the Application
-# For development
 npm run dev
+```
 
-# For production
+The development server runs on `http://localhost:3000` by default.
+
+## Supabase setup
+
+Local environment variables:
+
+```bash
+cp .env.example .env.local
+```
+
+Required variables:
+
+```bash
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-public-anon-key
+```
+
+Database schema:
+
+- Local Supabase config lives in `supabase/config.toml`
+- The initial schema lives in `supabase/migrations/20260405195000_initial_workspace_schema.sql`
+- The migration creates auth-linked `profiles`, plus `budgets`, `transactions`, `goals`, and `reminders` tables with row-level security
+
+To push the migration to a hosted project, link the project with the Supabase CLI using a personal access token or database password, then run `supabase db push`.
+
+## Scripts
+
+```bash
+npm run dev
+npm run typecheck
 npm run build
-npm start
+npm run preview
+```
 
----
+## Project structure
 
-## Project Structure
+```text
+src/
+  app/        Application shell, routing, and state provider
+  domain/     Typed finance models, defaults, and selectors
+  features/   Route-level screens
+  integrations/
+    supabase/ Typed client and repository layer
+  lib/        Formatting and persistence helpers
+  ui/         Shared UI primitives
+```
 
-SmartBudgets2/
-├── public/          # Static assets
-├── src/
-│   ├── components/  # Reusable UI elements
-│   ├── hooks/       # Custom application hooks
-│   ├── pages/       # Main view components
-│   ├── services/    # API and external service logic
-│   ├── utils/       # Formatting and helper utilities
-│   └── App.js       # Root application component
-├── .env.example     # Environment variable template
-├── package.json     # Scripts and dependencies
-└── README.md        # Project documentation
+## Notes
 
----
-
-## Usage (locally)
-
-1. Start the server and navigate to the local host address
-2. Create an account or log in.
-3. Use the Dashboard to add your initial balance and recurring expenses.
-4. Categorize your transactions to generate accurate spending charts.
-
----
-
-## Contributing
-
-1. Fork the repository.
-2. Create a feature branch (git checkout -b feature/NewFeature).
-3. Commit your changes (git commit -m 'Add NewFeature').
-4. Push to the branch (git push origin feature/NewFeature).
-5. Open a Pull Request.
-
----
-
-## License
-
-This project is licensed under the MIT License.
-
----
-
-## Contact
-
-Project Link: https://github.com/Elenor180/SmartBudgets2
+- The old root-level app and legacy component tree have been removed.
+- The service-role key must stay off the frontend. Only the anon key belongs in Vite env vars.
