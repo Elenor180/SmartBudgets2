@@ -150,6 +150,33 @@ export const getSavingsRate = (state: WorkspaceState) => {
 };
 
 export const getInsightMessages = (state: WorkspaceState) => {
+  const isCleanWorkspace =
+    state.profile.monthlyIncome <= 0 &&
+    state.budgets.length === 0 &&
+    state.transactions.length === 0 &&
+    state.goals.length === 0 &&
+    state.reminders.length === 0;
+
+  if (isCleanWorkspace) {
+    return [
+      {
+        title: 'Clean start',
+        body:
+          'Your workspace is empty right now. Set your profile, add income, and create the first few budgets when you are ready.',
+      },
+      {
+        title: 'First step',
+        body:
+          'Open settings or finish onboarding to update your name, currency, monthly income, and other account details.',
+      },
+      {
+        title: 'Build your baseline',
+        body:
+          'Once you add a budget or transaction, the dashboard, insights, and economist will begin reflecting your real numbers.',
+      },
+    ];
+  }
+
   const budgetPerformance = getBudgetPerformance(state);
   const topRisk = budgetPerformance
     .filter((entry) => entry.usage >= 80)

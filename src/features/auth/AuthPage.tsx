@@ -9,6 +9,11 @@ const AuthPage = () => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const normalizedEmail = email.trim();
+  const showResendConfirmation =
+    mode === 'signin' &&
+    Boolean(normalizedEmail) &&
+    /confirm/i.test(auth.syncError ?? '');
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -93,6 +98,7 @@ const AuthPage = () => {
               type="button"
               className={mode === 'signin' ? 'theme-chip theme-chip--active' : 'theme-chip'}
               onClick={() => setMode('signin')}
+              aria-pressed={mode === 'signin'}
             >
               Sign in
             </button>
@@ -100,6 +106,7 @@ const AuthPage = () => {
               type="button"
               className={mode === 'signup' ? 'theme-chip theme-chip--active' : 'theme-chip'}
               onClick={() => setMode('signup')}
+              aria-pressed={mode === 'signup'}
             >
               Create account
             </button>
@@ -107,6 +114,12 @@ const AuthPage = () => {
 
           {auth.notice ? <NoticeBanner tone="success">{auth.notice}</NoticeBanner> : null}
           {auth.syncError ? <NoticeBanner tone="danger">{auth.syncError}</NoticeBanner> : null}
+          {mode === 'signup' ? (
+            <NoticeBanner>
+              Use a real email address you can access. This project currently requires
+              email confirmation before password sign-in is allowed.
+            </NoticeBanner>
+          ) : null}
         </div>
 
         <form className="stack-md" onSubmit={handleSubmit}>
@@ -160,6 +173,17 @@ const AuthPage = () => {
                 ? 'Create secure account'
                 : 'Sign in to workspace'}
           </Button>
+
+          {showResendConfirmation ? (
+            <Button
+              type="button"
+              tone="secondary"
+              disabled={auth.isLoading}
+              onClick={() => void actions.resendConfirmation(normalizedEmail)}
+            >
+              Resend confirmation email
+            </Button>
+          ) : null}
         </form>
       </Card>
     </div>

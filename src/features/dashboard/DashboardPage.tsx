@@ -204,28 +204,35 @@ const DashboardPage = () => {
             title="Budget health"
             description="How each budget is performing this month."
           />
-          <div className="stack-md">
-            {budgetPerformance.slice(0, 5).map((entry) => (
-              <div className="budget-row" key={entry.budget.id}>
-                <div className="budget-row__head">
-                  <div className="stack-xs">
-                    <strong>{getCategoryLabel(entry.budget.categoryId)}</strong>
-                    <span>
-                      {formatCurrency(entry.spent, state.profile.currency)} spent of{' '}
-                      {formatCurrency(entry.budget.limit, state.profile.currency)}
-                    </span>
+          {budgetPerformance.length > 0 ? (
+            <div className="stack-md">
+              {budgetPerformance.slice(0, 5).map((entry) => (
+                <div className="budget-row" key={entry.budget.id}>
+                  <div className="budget-row__head">
+                    <div className="stack-xs">
+                      <strong>{getCategoryLabel(entry.budget.categoryId)}</strong>
+                      <span>
+                        {formatCurrency(entry.spent, state.profile.currency)} spent of{' '}
+                        {formatCurrency(entry.budget.limit, state.profile.currency)}
+                      </span>
+                    </div>
+                    <Tag tone={entry.usage >= 100 ? 'rose' : entry.usage >= 80 ? 'amber' : 'teal'}>
+                      {Math.round(entry.usage)}%
+                    </Tag>
                   </div>
-                  <Tag tone={entry.usage >= 100 ? 'rose' : entry.usage >= 80 ? 'amber' : 'teal'}>
-                    {Math.round(entry.usage)}%
-                  </Tag>
+                  <ProgressBar
+                    value={entry.usage}
+                    tone={entry.usage >= 100 ? 'rose' : entry.usage >= 80 ? 'amber' : 'teal'}
+                  />
                 </div>
-                <ProgressBar
-                  value={entry.usage}
-                  tone={entry.usage >= 100 ? 'rose' : entry.usage >= 80 ? 'amber' : 'teal'}
-                />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No budgets yet"
+              description="Create your first budget limit when you are ready to start shaping the workspace."
+            />
+          )}
         </Card>
 
         <Card>

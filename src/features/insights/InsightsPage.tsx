@@ -16,7 +16,14 @@ import {
   getMonthlyTrend,
 } from '@/domain/selectors';
 import { formatCurrency, formatPercent, getCategoryLabel } from '@/lib/format';
-import { Card, PageHeader, ProgressBar, SectionHeader, Tag } from '@/ui/components';
+import {
+  Card,
+  EmptyState,
+  PageHeader,
+  ProgressBar,
+  SectionHeader,
+  Tag,
+} from '@/ui/components';
 
 const toTooltipAmount = (value: TooltipValueType | undefined) => {
   if (typeof value === 'number') {
@@ -98,33 +105,40 @@ const InsightsPage = () => {
             title="Budget pressure map"
             description="The categories that are approaching their limits fastest."
           />
-          <div className="stack-md">
-            {budgetPerformance.map((entry) => (
-              <div className="budget-row" key={entry.budget.id}>
-                <div className="budget-row__head">
-                  <div className="stack-xs">
-                    <strong>{getCategoryLabel(entry.budget.categoryId)}</strong>
-                    <span>
-                      Remaining {formatCurrency(entry.remaining, state.profile.currency)}
-                    </span>
+          {budgetPerformance.length > 0 ? (
+            <div className="stack-md">
+              {budgetPerformance.map((entry) => (
+                <div className="budget-row" key={entry.budget.id}>
+                  <div className="budget-row__head">
+                    <div className="stack-xs">
+                      <strong>{getCategoryLabel(entry.budget.categoryId)}</strong>
+                      <span>
+                        Remaining {formatCurrency(entry.remaining, state.profile.currency)}
+                      </span>
+                    </div>
+                    <Tag
+                      tone={
+                        entry.usage >= 100 ? 'rose' : entry.usage >= 80 ? 'amber' : 'teal'
+                      }
+                    >
+                      {formatPercent(entry.usage)}
+                    </Tag>
                   </div>
-                  <Tag
+                  <ProgressBar
+                    value={entry.usage}
                     tone={
                       entry.usage >= 100 ? 'rose' : entry.usage >= 80 ? 'amber' : 'teal'
                     }
-                  >
-                    {formatPercent(entry.usage)}
-                  </Tag>
+                  />
                 </div>
-                <ProgressBar
-                  value={entry.usage}
-                  tone={
-                    entry.usage >= 100 ? 'rose' : entry.usage >= 80 ? 'amber' : 'teal'
-                  }
-                />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No budget pressure yet"
+              description="Once you create budgets, this view will show which categories need attention first."
+            />
+          )}
         </Card>
       </section>
     </div>

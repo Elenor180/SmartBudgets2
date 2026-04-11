@@ -225,6 +225,7 @@ export interface WorkspaceAuthState {
   isAuthenticated: boolean;
   isConfigured: boolean;
   isLoading: boolean;
+  isWorkspaceReady: boolean;
   isSaving: boolean;
   syncError: string | null;
   notice: string | null;
@@ -240,6 +241,8 @@ export interface WorkspaceContextValue {
       email: string;
       password: string;
     }) => Promise<void>;
+    resendConfirmation: (email: string) => Promise<void>;
+    reloadWorkspace: () => Promise<void>;
     signOut: () => Promise<void>;
     clearNotice: () => void;
     completeSetup: (

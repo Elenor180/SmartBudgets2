@@ -1,4 +1,4 @@
-import type { AdvisorResponse, WorkspaceState } from '@/domain/models';
+import type { AdvisorResponse } from '@/domain/models';
 import { getSupabaseClient } from '@/integrations/supabase/client';
 
 const fallbackResponse: AdvisorResponse = {
@@ -13,11 +13,9 @@ const fallbackResponse: AdvisorResponse = {
 export const requestAdvisorResponse = async ({
   mode,
   prompt,
-  workspace,
 }: {
   mode: 'briefing' | 'chat';
   prompt: string;
-  workspace: WorkspaceState;
 }): Promise<AdvisorResponse> => {
   const { data, error } = await getSupabaseClient().functions.invoke(
     'ai-advisor',
@@ -25,7 +23,6 @@ export const requestAdvisorResponse = async ({
       body: {
         mode,
         prompt,
-        workspace,
       },
     },
   );

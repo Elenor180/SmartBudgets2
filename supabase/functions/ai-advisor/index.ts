@@ -1,4 +1,6 @@
+import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import * as jose from 'jsr:@panva/jose@6';
 
 type CategoryId =
   | 'housing'
@@ -116,6 +118,76 @@ interface AdvisorResponse {
   actions: AdvisorAction[];
 }
 
+interface JwtIdentity {
+  accessToken: string;
+  userId: string;
+  email: string | null;
+}
+
+interface ProfileRow {
+  email: string | null;
+  full_name: string | null;
+  currency: string | null;
+  monthly_income: number | string | null;
+  theme: string | null;
+  started_at: string | null;
+  setup_complete: boolean | null;
+}
+
+interface BudgetRow {
+  id: string;
+  category_id: string | null;
+  limit_amount: number | string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface TransactionRow {
+  id: string;
+  description: string | null;
+  amount: number | string | null;
+  category_id: string | null;
+  occurred_on: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+interface GoalRow {
+  id: string;
+  name: string | null;
+  category_id: string | null;
+  target_amount: number | string | null;
+  current_amount: number | string | null;
+  target_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ReminderRow {
+  id: string;
+  title: string | null;
+  kind: string | null;
+  category_id: string | null;
+  due_date: string | null;
+  threshold: number | string | null;
+  amount: number | string | null;
+  note: string | null;
+  active: boolean | null;
+  created_at: string;
+  updated_at: string;
+}
+
+class HttpError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'HttpError';
+    this.status = status;
+  }
+}
+
 const categoryIds = [
   'housing',
   'food',
@@ -149,6 +221,17 @@ const fallbackResponse: AdvisorResponse = {
   notices: [],
   actions: [],
 };
+
+const nowIso = () => new Date().toISOString();
+
+const supabaseUrl = Deno.env.get('SUPABASE_URL');
+const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+const supabaseJwtIssuer =
+  Deno.env.get('SB_JWT_ISSUER') ??
+  (supabaseUrl ? `${supabaseUrl}/auth/v1` : undefined);
+const supabaseJwtKeys = supabaseUrl
+  ? jose.createRemoteJWKSet(new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`))
+  : null;
 
 const advisorResponseSchema = {
   type: 'object',
@@ -253,149 +336,227 @@ const isCategoryId = (value: unknown): value is CategoryId =>
 const isReminderKind = (value: unknown): value is ReminderKind =>
   typeof value === 'string' && reminderKinds.includes(value as ReminderKind);
 
-const parseWorkspace = (input: unknown): WorkspaceState | null => {
-  if (!isRecord(input) || !isRecord(input.profile)) {
-    return null;
+const normalizeCurrency = (value: string | null | undefined) => {
+  if (value === 'EUR' || value === 'GBP' || value === 'ZAR') {
+    return value;
   }
 
-  const profile = input.profile;
-  const monthlyIncome = Math.max(0, toFiniteNumber(profile.monthlyIncome));
-  const currency =
-    profile.currency === 'USD' ||
-    profile.currency === 'EUR' ||
-    profile.currency === 'GBP' ||
-    profile.currency === 'ZAR'
-      ? profile.currency
-      : 'USD';
-  const theme = profile.theme === 'dark' ? 'dark' : 'light';
+  return 'USD' as const;
+};
 
-  const budgets = Array.isArray(input.budgets)
-    ? input.budgets
-        .filter(isRecord)
-        .map((budget) => ({
-          id: typeof budget.id === 'string' ? budget.id : crypto.randomUUID(),
-          categoryId: isCategoryId(budget.categoryId)
-            ? budget.categoryId
-            : 'other',
-          limit: Math.max(0, toFiniteNumber(budget.limit)),
-          createdAt:
-            typeof budget.createdAt === 'string'
-              ? budget.createdAt
-              : new Date().toISOString(),
-          updatedAt:
-            typeof budget.updatedAt === 'string'
-              ? budget.updatedAt
-              : new Date().toISOString(),
-        }))
-    : [];
+const normalizeTheme = (value: string | null | undefined) =>
+  value === 'dark' ? 'dark' : 'light';
 
-  const transactions = Array.isArray(input.transactions)
-    ? input.transactions
-        .filter(isRecord)
-        .map((transaction) => ({
-          id:
-            typeof transaction.id === 'string'
-              ? transaction.id
-              : crypto.randomUUID(),
-          description:
-            typeof transaction.description === 'string'
-              ? transaction.description
-              : 'Transaction',
-          amount: Math.max(0, toFiniteNumber(transaction.amount)),
-          categoryId: isCategoryId(transaction.categoryId)
-            ? transaction.categoryId
-            : 'other',
-          occurredOn:
-            typeof transaction.occurredOn === 'string'
-              ? transaction.occurredOn
-              : new Date().toISOString(),
-          notes: typeof transaction.notes === 'string' ? transaction.notes : '',
-          createdAt:
-            typeof transaction.createdAt === 'string'
-              ? transaction.createdAt
-              : new Date().toISOString(),
-        }))
-    : [];
+const normalizeCategory = (value: string | null | undefined): CategoryId =>
+  isCategoryId(value) ? value : 'other';
 
-  const goals = Array.isArray(input.goals)
-    ? input.goals
-        .filter(isRecord)
-        .map((goal) => ({
-          id: typeof goal.id === 'string' ? goal.id : crypto.randomUUID(),
-          name: typeof goal.name === 'string' ? goal.name : 'Goal',
-          categoryId: isCategoryId(goal.categoryId) ? goal.categoryId : 'savings',
-          targetAmount: Math.max(0, toFiniteNumber(goal.targetAmount)),
-          currentAmount: Math.max(0, toFiniteNumber(goal.currentAmount)),
-          targetDate:
-            typeof goal.targetDate === 'string' ? goal.targetDate : '',
-          notes: typeof goal.notes === 'string' ? goal.notes : '',
-          createdAt:
-            typeof goal.createdAt === 'string'
-              ? goal.createdAt
-              : new Date().toISOString(),
-          updatedAt:
-            typeof goal.updatedAt === 'string'
-              ? goal.updatedAt
-              : new Date().toISOString(),
-        }))
-    : [];
+const normalizeReminderKind = (value: string | null | undefined): ReminderKind =>
+  isReminderKind(value) ? value : 'bill';
 
-  const reminders = Array.isArray(input.reminders)
-    ? input.reminders
-        .filter(isRecord)
-        .map((reminder) => ({
-          id:
-            typeof reminder.id === 'string'
-              ? reminder.id
-              : crypto.randomUUID(),
-          title:
-            typeof reminder.title === 'string' ? reminder.title : 'Reminder',
-          kind: isReminderKind(reminder.kind) ? reminder.kind : 'bill',
-          categoryId: isCategoryId(reminder.categoryId)
-            ? reminder.categoryId
-            : undefined,
-          dueDate:
-            typeof reminder.dueDate === 'string' ? reminder.dueDate : undefined,
-          threshold:
-            reminder.threshold === undefined
-              ? undefined
-              : Math.max(0, toFiniteNumber(reminder.threshold)),
-          amount:
-            reminder.amount === undefined
-              ? undefined
-              : Math.max(0, toFiniteNumber(reminder.amount)),
-          note: typeof reminder.note === 'string' ? reminder.note : '',
-          active: reminder.active !== false,
-          createdAt:
-            typeof reminder.createdAt === 'string'
-              ? reminder.createdAt
-              : new Date().toISOString(),
-          updatedAt:
-            typeof reminder.updatedAt === 'string'
-              ? reminder.updatedAt
-              : new Date().toISOString(),
-        }))
-    : [];
+const getBearerToken = (request: Request) => {
+  const authorization = request.headers.get('authorization');
+
+  if (!authorization) {
+    throw new HttpError(401, 'Missing authorization header.');
+  }
+
+  const [scheme, token] = authorization.split(' ');
+
+  if (scheme !== 'Bearer' || !token) {
+    throw new HttpError(401, "Authorization header must use 'Bearer {token}'.");
+  }
+
+  return token;
+};
+
+const verifySupabaseJwt = async (request: Request): Promise<JwtIdentity> => {
+  if (!supabaseJwtKeys || !supabaseJwtIssuer) {
+    throw new HttpError(500, 'Supabase JWT verification is not configured.');
+  }
+
+  const accessToken = getBearerToken(request);
+
+  try {
+    const { payload } = await jose.jwtVerify(accessToken, supabaseJwtKeys, {
+      issuer: supabaseJwtIssuer,
+    });
+
+    const userId =
+      typeof payload.sub === 'string' && payload.sub.trim() ? payload.sub : null;
+    const email =
+      typeof payload.email === 'string' && payload.email.trim()
+        ? payload.email
+        : null;
+
+    if (!userId) {
+      throw new HttpError(401, 'JWT subject is missing.');
+    }
+
+    return {
+      accessToken,
+      userId,
+      email,
+    };
+  } catch (error) {
+    if (error instanceof HttpError) {
+      throw error;
+    }
+
+    throw new HttpError(401, 'Invalid or expired session.');
+  }
+};
+
+const createAuthorizedSupabaseClient = (accessToken: string) => {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new HttpError(500, 'Supabase function environment is not configured.');
+  }
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  });
+};
+
+const buildBaseWorkspace = (identity: JwtIdentity): WorkspaceState => ({
+  version: 1,
+  setupComplete: false,
+  profile: {
+    fullName: 'Workspace owner',
+    email: identity.email ?? '',
+    currency: 'USD',
+    monthlyIncome: 4500,
+    theme: 'light',
+    startedAt: nowIso(),
+  },
+  budgets: [],
+  transactions: [],
+  goals: [],
+  reminders: [],
+});
+
+const loadWorkspaceForAdvisor = async (
+  identity: JwtIdentity,
+): Promise<WorkspaceState> => {
+  const supabase = createAuthorizedSupabaseClient(identity.accessToken);
+
+  const profileResult = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', identity.userId)
+    .maybeSingle<ProfileRow>();
+
+  if (profileResult.error) {
+    throw new HttpError(502, 'Unable to load the customer profile.');
+  }
+
+  const [
+    budgetsResult,
+    transactionsResult,
+    goalsResult,
+    remindersResult,
+  ] = await Promise.all([
+    supabase
+      .from('budgets')
+      .select('*')
+      .eq('user_id', identity.userId)
+      .returns<BudgetRow[]>(),
+    supabase
+      .from('transactions')
+      .select('*')
+      .eq('user_id', identity.userId)
+      .order('occurred_on', { ascending: false })
+      .returns<TransactionRow[]>(),
+    supabase
+      .from('goals')
+      .select('*')
+      .eq('user_id', identity.userId)
+      .returns<GoalRow[]>(),
+    supabase
+      .from('reminders')
+      .select('*')
+      .eq('user_id', identity.userId)
+      .returns<ReminderRow[]>(),
+  ]);
+
+  if (budgetsResult.error) {
+    throw new HttpError(502, 'Unable to load budgets for this workspace.');
+  }
+
+  if (transactionsResult.error) {
+    throw new HttpError(502, 'Unable to load transactions for this workspace.');
+  }
+
+  if (goalsResult.error) {
+    throw new HttpError(502, 'Unable to load goals for this workspace.');
+  }
+
+  if (remindersResult.error) {
+    throw new HttpError(502, 'Unable to load reminders for this workspace.');
+  }
+
+  const baseWorkspace = buildBaseWorkspace(identity);
+  const profileRow = profileResult.data;
 
   return {
-    version: Math.max(1, Math.trunc(toFiniteNumber(input.version))),
-    setupComplete: input.setupComplete !== false,
+    version: 1,
+    setupComplete: profileRow?.setup_complete ?? false,
     profile: {
-      fullName:
-        typeof profile.fullName === 'string' ? profile.fullName : 'Workspace owner',
-      email: typeof profile.email === 'string' ? profile.email : '',
-      currency,
-      monthlyIncome,
-      theme,
-      startedAt:
-        typeof profile.startedAt === 'string'
-          ? profile.startedAt
-          : new Date().toISOString(),
+      fullName: profileRow?.full_name || baseWorkspace.profile.fullName,
+      email: profileRow?.email || identity.email || baseWorkspace.profile.email,
+      currency: normalizeCurrency(profileRow?.currency),
+      monthlyIncome: Math.max(
+        0,
+        toFiniteNumber(profileRow?.monthly_income ?? baseWorkspace.profile.monthlyIncome),
+      ),
+      theme: normalizeTheme(profileRow?.theme),
+      startedAt: profileRow?.started_at || baseWorkspace.profile.startedAt,
     },
-    budgets,
-    transactions,
-    goals,
-    reminders,
+    budgets: (budgetsResult.data ?? []).map((budget) => ({
+      id: budget.id,
+      categoryId: normalizeCategory(budget.category_id),
+      limit: Math.max(0, toFiniteNumber(budget.limit_amount)),
+      createdAt: budget.created_at,
+      updatedAt: budget.updated_at,
+    })),
+    transactions: (transactionsResult.data ?? []).map((transaction) => ({
+      id: transaction.id,
+      description: transaction.description || 'Transaction',
+      amount: Math.max(0, toFiniteNumber(transaction.amount)),
+      categoryId: normalizeCategory(transaction.category_id),
+      occurredOn: transaction.occurred_on || nowIso(),
+      notes: transaction.notes || '',
+      createdAt: transaction.created_at,
+    })),
+    goals: (goalsResult.data ?? []).map((goal) => ({
+      id: goal.id,
+      name: goal.name || 'Goal',
+      categoryId: normalizeCategory(goal.category_id),
+      targetAmount: Math.max(0, toFiniteNumber(goal.target_amount)),
+      currentAmount: Math.max(0, toFiniteNumber(goal.current_amount)),
+      targetDate: goal.target_date || '',
+      notes: goal.notes || '',
+      createdAt: goal.created_at,
+      updatedAt: goal.updated_at,
+    })),
+    reminders: (remindersResult.data ?? []).map((reminder) => ({
+      id: reminder.id,
+      title: reminder.title || 'Reminder',
+      kind: normalizeReminderKind(reminder.kind),
+      categoryId: reminder.category_id
+        ? normalizeCategory(reminder.category_id)
+        : undefined,
+      dueDate: reminder.due_date ?? undefined,
+      threshold:
+        reminder.threshold === null ? undefined : Math.max(0, toFiniteNumber(reminder.threshold)),
+      amount: reminder.amount === null ? undefined : Math.max(0, toFiniteNumber(reminder.amount)),
+      note: reminder.note || '',
+      active: reminder.active !== false,
+      createdAt: reminder.created_at,
+      updatedAt: reminder.updated_at,
+    })),
   };
 };
 
@@ -480,8 +641,12 @@ const summarizeWorkspace = (workspace: WorkspaceState) => {
   const reminders = workspace.reminders
     .filter((reminder) => reminder.active)
     .sort((left, right) => {
-      const leftTime = left.dueDate ? new Date(left.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
-      const rightTime = right.dueDate ? new Date(right.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const leftTime = left.dueDate
+        ? new Date(left.dueDate).getTime()
+        : Number.MAX_SAFE_INTEGER;
+      const rightTime = right.dueDate
+        ? new Date(right.dueDate).getTime()
+        : Number.MAX_SAFE_INTEGER;
       return leftTime - rightTime;
     })
     .slice(0, 10)
@@ -588,7 +753,8 @@ const parseGeminiPayload = async (apiKey: string, prompt: string) => {
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(`Gemini request failed: ${response.status} ${detail}`);
+    console.error('Gemini request failed', response.status, detail);
+    throw new HttpError(502, 'The economist service could not reach the model provider.');
   }
 
   const payload = await response.json();
@@ -598,10 +764,14 @@ const parseGeminiPayload = async (apiKey: string, prompt: string) => {
     )?.text ?? '';
 
   if (!text) {
-    throw new Error('Gemini did not return structured advisor content.');
+    throw new HttpError(502, 'The economist provider returned an empty response.');
   }
 
-  return JSON.parse(text) as Partial<AdvisorResponse>;
+  try {
+    return JSON.parse(text) as Partial<AdvisorResponse>;
+  } catch {
+    throw new HttpError(502, 'The economist provider returned invalid structured content.');
+  }
 };
 
 const sanitizeResponse = (input: Partial<AdvisorResponse>): AdvisorResponse => ({
@@ -718,6 +888,28 @@ const sanitizeResponse = (input: Partial<AdvisorResponse>): AdvisorResponse => (
     : [],
 });
 
+const parseAdvisorRequest = async (request: Request) => {
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    throw new HttpError(400, 'Request body must be valid JSON.');
+  }
+
+  if (!isRecord(body)) {
+    throw new HttpError(400, 'Request body must be a JSON object.');
+  }
+
+  return {
+    mode: body.mode === 'briefing' ? 'briefing' : ('chat' as const),
+    prompt:
+      typeof body.prompt === 'string' && body.prompt.trim()
+        ? body.prompt.trim().slice(0, 4000)
+        : 'Review this workspace and suggest the highest-impact next steps.',
+  };
+};
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response('ok', {
@@ -734,41 +926,30 @@ Deno.serve(async (request) => {
     );
   }
 
-  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-
-  if (!geminiApiKey) {
-    return json(
-      { error: 'GEMINI_API_KEY is not configured.' },
-      {
-        status: 500,
-      },
-    );
-  }
-
   try {
-    const body = await request.json();
-    const mode = body?.mode === 'briefing' ? 'briefing' : 'chat';
-    const prompt =
-      typeof body?.prompt === 'string' && body.prompt.trim()
-        ? body.prompt.trim().slice(0, 4000)
-        : 'Review this workspace and suggest the highest-impact next steps.';
-    const workspace = parseWorkspace(body?.workspace);
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
 
-    if (!workspace) {
-      return json(
-        { error: 'A valid workspace payload is required.' },
-        {
-          status: 400,
-        },
-      );
+    if (!geminiApiKey) {
+      throw new HttpError(500, 'GEMINI_API_KEY is not configured.');
     }
 
+    const identity = await verifySupabaseJwt(request);
+    const { mode, prompt } = await parseAdvisorRequest(request);
+    const workspace = await loadWorkspaceForAdvisor(identity);
     const advisorPrompt = buildPrompt(mode, prompt, workspace);
     const response = await parseGeminiPayload(geminiApiKey, advisorPrompt);
 
     return json(sanitizeResponse(response));
   } catch (error) {
     console.error('ai-advisor failed', error);
-    return json(fallbackResponse, { status: 200 });
+
+    if (error instanceof HttpError) {
+      return json({ error: error.message }, { status: error.status });
+    }
+
+    return json(
+      { error: 'The economist service failed to complete the request.' },
+      { status: 500 },
+    );
   }
 });

@@ -8,6 +8,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import {
   createEmptyWorkspace,
   createSampleWorkspace,
@@ -32,6 +33,7 @@ import {
   loadWorkspaceForUser,
   onAuthStateChange,
   replaceWorkspaceSnapshot,
+  resendSignUpConfirmation,
   signInWithPassword,
   signOutFromSupabase,
   signUpWithPassword,
@@ -70,6 +72,24 @@ type WorkspaceAction =
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 const now = () => new Date().toISOString();
+
+const isEmailNotConfirmedError = (error: unknown) => {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  const code =
+    'code' in error && typeof error.code === 'string' ? error.code : null;
+  const message =
+    'message' in error && typeof error.message === 'string'
+      ? error.message
+      : null;
+
+  return (
+    code === 'email_not_confirmed' ||
+    Boolean(message && /email not confirmed/i.test(message))
+  );
+};
 
 const createId = (prefix: string) => {
   const random =
@@ -253,6 +273,7 @@ const initialAuthState: WorkspaceAuthState = {
   isAuthenticated: false,
   isConfigured: isSupabaseConfigured,
   isLoading: isSupabaseConfigured,
+  isWorkspaceReady: false,
   isSaving: false,
   syncError: null,
   notice: null,
@@ -272,6 +293,10 @@ export const WorkspaceProvider = ({
   const stateRef = useRef(state);
   const authRef = useRef(auth);
   const saveQueueRef = useRef(Promise.resolve());
+  const authEventTimeoutsRef = useRef(new Set<number>());
+  const workspaceLoadIdRef = useRef(0);
+  const loadedWorkspaceUserIdRef = useRef<string | null>(null);
+  const inFlightWorkspaceUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -359,7 +384,139 @@ export const WorkspaceProvider = ({
     };
   };
 
-  const loadSessionWorkspace = useEffectEvent(async () => {
+  const hydrateWorkspaceFromSession = useEffectEvent(
+    async (
+      session: Session | null,
+      options?: {
+        force?: boolean;
+        source?: 'initial' | 'manual' | AuthChangeEvent;
+      },
+    ) => {
+      const loadId = workspaceLoadIdRef.current + 1;
+      workspaceLoadIdRef.current = loadId;
+
+      const isCurrentLoad = () => workspaceLoadIdRef.current === loadId;
+
+      const applySignedOutState = () => {
+        loadedWorkspaceUserIdRef.current = null;
+        inFlightWorkspaceUserIdRef.current = null;
+        const emptyWorkspace = createEmptyWorkspace();
+        stateRef.current = emptyWorkspace;
+        dispatch({ type: 'hydrateWorkspace', payload: emptyWorkspace });
+        setAuth((current) => ({
+          ...current,
+          user: null,
+          isAuthenticated: false,
+          isConfigured: true,
+          isLoading: false,
+          isWorkspaceReady: false,
+          isSaving: false,
+          syncError: null,
+        }));
+      };
+
+      if (!isSupabaseConfigured) {
+        setAuth((current) => ({
+          ...current,
+          isConfigured: false,
+          isLoading: false,
+        }));
+        return;
+      }
+
+      const user = getAuthUser(session);
+
+      if (!session?.user || !user) {
+        if (isCurrentLoad()) {
+          applySignedOutState();
+        }
+        return;
+      }
+
+      const shouldReuseCurrentWorkspace =
+        options?.force !== true &&
+        authRef.current.isWorkspaceReady &&
+        loadedWorkspaceUserIdRef.current === user.id;
+
+      if (shouldReuseCurrentWorkspace) {
+        setAuth((current) => ({
+          ...current,
+          user,
+          isAuthenticated: true,
+          isConfigured: true,
+          isLoading: false,
+          isWorkspaceReady: true,
+          syncError: null,
+        }));
+        return;
+      }
+
+      const duplicateLoadAlreadyInFlight =
+        options?.force !== true && inFlightWorkspaceUserIdRef.current === user.id;
+
+      if (duplicateLoadAlreadyInFlight) {
+        return;
+      }
+
+      setAuth((current) => ({
+        ...current,
+        user,
+        isAuthenticated: true,
+        isConfigured: true,
+        isLoading: true,
+        isWorkspaceReady: false,
+        syncError: null,
+      }));
+      inFlightWorkspaceUserIdRef.current = user.id;
+
+      try {
+        const workspace = await loadWorkspaceForUser(session.user);
+
+        if (!isCurrentLoad()) {
+          return;
+        }
+
+        stateRef.current = workspace;
+        dispatch({ type: 'hydrateWorkspace', payload: workspace });
+        loadedWorkspaceUserIdRef.current = user.id;
+        inFlightWorkspaceUserIdRef.current = null;
+        setAuth((current) => ({
+          ...current,
+          user,
+          isAuthenticated: true,
+          isConfigured: true,
+          isLoading: false,
+          isWorkspaceReady: true,
+          syncError: null,
+        }));
+      } catch (error) {
+        if (!isCurrentLoad()) {
+          return;
+        }
+
+        loadedWorkspaceUserIdRef.current = null;
+        inFlightWorkspaceUserIdRef.current = null;
+        const message = toErrorMessage(
+          error,
+          'Unable to load your workspace from Supabase.',
+        );
+
+        setAuth((current) => ({
+          ...current,
+          user,
+          isAuthenticated: true,
+          isConfigured: true,
+          isLoading: false,
+          isWorkspaceReady: false,
+          syncError: message,
+        }));
+      }
+    },
+  );
+
+  const loadInitialSession = useEffectEvent(async () => {
+    const force = false;
+
     if (!isSupabaseConfigured) {
       setAuth((current) => ({
         ...current,
@@ -371,44 +528,10 @@ export const WorkspaceProvider = ({
 
     try {
       const session = await getCurrentSession();
-      const user = getAuthUser(session);
-
-      if (!session?.user || !user) {
-        const emptyWorkspace = createEmptyWorkspace();
-        stateRef.current = emptyWorkspace;
-        dispatch({ type: 'hydrateWorkspace', payload: emptyWorkspace });
-        setAuth((current) => ({
-          ...current,
-          user: null,
-          isAuthenticated: false,
-          isConfigured: true,
-          isLoading: false,
-          isSaving: false,
-          syncError: null,
-        }));
-        return;
-      }
-
-      setAuth((current) => ({
-        ...current,
-        user,
-        isAuthenticated: true,
-        isConfigured: true,
-        isLoading: true,
-        syncError: null,
-      }));
-
-      const workspace = await loadWorkspaceForUser(session.user);
-      stateRef.current = workspace;
-      dispatch({ type: 'hydrateWorkspace', payload: workspace });
-      setAuth((current) => ({
-        ...current,
-        user,
-        isAuthenticated: true,
-        isConfigured: true,
-        isLoading: false,
-        syncError: null,
-      }));
+      await hydrateWorkspaceFromSession(session, {
+        force,
+        source: 'initial',
+      });
     } catch (error) {
       const message = toErrorMessage(
         error,
@@ -418,22 +541,39 @@ export const WorkspaceProvider = ({
       setAuth((current) => ({
         ...current,
         isLoading: false,
+        isWorkspaceReady: false,
         syncError: message,
       }));
     }
   });
 
   useEffect(() => {
-    void loadSessionWorkspace();
+    void loadInitialSession();
 
-    const subscription = onAuthStateChange(() => {
-      void loadSessionWorkspace();
+    const subscription = onAuthStateChange((event, session) => {
+      const timeoutId = window.setTimeout(() => {
+        authEventTimeoutsRef.current.delete(timeoutId);
+        const shouldForce =
+          event === 'SIGNED_OUT' || event === 'USER_UPDATED';
+
+        void hydrateWorkspaceFromSession(session, {
+          force: shouldForce,
+          source: event,
+        });
+      }, 0);
+
+      authEventTimeoutsRef.current.add(timeoutId);
     });
 
     return () => {
+      workspaceLoadIdRef.current += 1;
+      authEventTimeoutsRef.current.forEach((timeoutId) => {
+        window.clearTimeout(timeoutId);
+      });
+      authEventTimeoutsRef.current.clear();
       subscription?.unsubscribe();
     };
-  }, [loadSessionWorkspace]);
+  }, []);
 
   const value: WorkspaceContextValue = {
     state,
@@ -443,6 +583,7 @@ export const WorkspaceProvider = ({
         setAuth((current) => ({
           ...current,
           isLoading: true,
+          isWorkspaceReady: false,
           notice: null,
           syncError: null,
         }));
@@ -450,13 +591,18 @@ export const WorkspaceProvider = ({
         try {
           await signInWithPassword(payload);
         } catch (error) {
+          const message = isEmailNotConfirmedError(error)
+            ? 'This account exists, but the email address has not been confirmed yet. Check your inbox for the verification link, or resend the confirmation email below.'
+            : toErrorMessage(
+                error,
+                'Unable to sign in with those credentials.',
+              );
+
           setAuth((current) => ({
             ...current,
             isLoading: false,
-            syncError: toErrorMessage(
-              error,
-              'Unable to sign in with those credentials.',
-            ),
+            isWorkspaceReady: false,
+            syncError: message,
           }));
         }
       },
@@ -464,6 +610,7 @@ export const WorkspaceProvider = ({
         setAuth((current) => ({
           ...current,
           isLoading: true,
+          isWorkspaceReady: false,
           notice: null,
           syncError: null,
         }));
@@ -474,6 +621,7 @@ export const WorkspaceProvider = ({
           setAuth((current) => ({
             ...current,
             isLoading: false,
+            isWorkspaceReady: false,
             notice: result.needsEmailConfirmation
               ? 'Account created. Check your inbox to confirm your email, then sign in.'
               : 'Account created. Finish your workspace setup below.',
@@ -482,6 +630,7 @@ export const WorkspaceProvider = ({
           setAuth((current) => ({
             ...current,
             isLoading: false,
+            isWorkspaceReady: false,
             syncError: toErrorMessage(
               error,
               'Unable to create your account right now.',
@@ -489,10 +638,51 @@ export const WorkspaceProvider = ({
           }));
         }
       },
+      resendConfirmation: async (email) => {
+        setAuth((current) => ({
+          ...current,
+          isLoading: true,
+          syncError: null,
+          notice: null,
+        }));
+
+        try {
+          await resendSignUpConfirmation(email);
+          setAuth((current) => ({
+            ...current,
+            isLoading: false,
+            notice:
+              'Confirmation email sent again. Open the message in your inbox, verify the account, then sign in.',
+          }));
+        } catch (error) {
+          setAuth((current) => ({
+            ...current,
+            isLoading: false,
+            syncError: toErrorMessage(
+              error,
+              'Unable to resend the confirmation email right now.',
+            ),
+          }));
+        }
+      },
+      reloadWorkspace: async () => {
+        setAuth((current) => ({
+          ...current,
+          isLoading: true,
+          syncError: null,
+        }));
+
+        const session = await getCurrentSession();
+        await hydrateWorkspaceFromSession(session, {
+          force: true,
+          source: 'manual',
+        });
+      },
       signOut: async () => {
         setAuth((current) => ({
           ...current,
           isLoading: true,
+          isWorkspaceReady: false,
           syncError: null,
         }));
 
@@ -502,6 +692,7 @@ export const WorkspaceProvider = ({
           setAuth((current) => ({
             ...current,
             isLoading: false,
+            isWorkspaceReady: false,
             syncError: toErrorMessage(
               error,
               'Unable to sign out right now.',

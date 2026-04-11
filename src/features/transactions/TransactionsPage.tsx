@@ -150,6 +150,7 @@ const TransactionsPage = () => {
               <input
                 className="input input--bare"
                 value={query}
+                aria-label="Search transactions"
                 onChange={(event) => {
                   const next = event.target.value;
                   startTransition(() => setQuery(next));
@@ -161,6 +162,7 @@ const TransactionsPage = () => {
             <select
               className="select"
               value={categoryFilter}
+              aria-label="Filter transactions by category"
               onChange={(event) => {
                 const next = event.target.value as 'all' | CategoryId;
                 startTransition(() => setCategoryFilter(next));

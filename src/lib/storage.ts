@@ -12,7 +12,6 @@ import {
 } from '@/domain/models';
 import {
   WORKSPACE_SCHEMA_VERSION,
-  createDefaultBudgets,
   createEmptyWorkspace,
   createSampleWorkspace,
 } from '@/domain/defaults';
@@ -98,7 +97,7 @@ const normalizeProfile = (value: unknown): Profile => {
 
 const normalizeBudgets = (value: unknown): Budget[] => {
   if (!Array.isArray(value)) {
-    return createDefaultBudgets();
+    return [];
   }
 
   const budgets = value.map((budget) => {

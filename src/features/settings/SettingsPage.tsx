@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useWorkspace } from '@/app/WorkspaceProvider';
 import { currencies, themeModes } from '@/domain/models';
 import { deserializeWorkspace, serializeWorkspace } from '@/lib/storage';
@@ -12,6 +12,12 @@ const SettingsPage = () => {
     String(state.profile.monthlyIncome),
   );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setFullName(state.profile.fullName);
+    setCurrency(state.profile.currency);
+    setMonthlyIncome(String(state.profile.monthlyIncome));
+  }, [state.profile]);
 
   const handleSave = (event: React.FormEvent) => {
     event.preventDefault();
@@ -53,7 +59,7 @@ const SettingsPage = () => {
       <PageHeader
         eyebrow="Settings"
         title="Control the workspace contract"
-        description="Profile, theme, account access, and import/export all map back to the Supabase workspace contract."
+        description="Profile, onboarding values, theme, account access, and import/export all map back to the Supabase workspace contract."
       />
 
       {auth.notice ? <NoticeBanner tone="success">{auth.notice}</NoticeBanner> : null}
@@ -62,8 +68,8 @@ const SettingsPage = () => {
       <section className="two-column">
         <Card>
           <SectionHeader
-            title="Profile"
-            description="Keep your workspace metadata current and consistent."
+            title="Profile and onboarding"
+            description="Update the same core values that shape the customer workspace after login."
           />
           <form className="stack-md" onSubmit={handleSave}>
             <label className="field">
@@ -132,6 +138,7 @@ const SettingsPage = () => {
               <button
                 key={option}
                 type="button"
+                aria-pressed={option === state.profile.theme}
                 className={
                   option === state.profile.theme
                     ? 'theme-chip theme-chip--active'

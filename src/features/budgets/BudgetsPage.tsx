@@ -20,6 +20,10 @@ const BudgetsPage = () => {
   const [limit, setLimit] = useState('');
   const budgetPerformance = getBudgetPerformance(state);
   const totalBudget = getTotalBudget(state);
+  const incomeCoverage =
+    state.profile.monthlyIncome > 0
+      ? (totalBudget / state.profile.monthlyIncome) * 100
+      : 0;
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -85,7 +89,7 @@ const BudgetsPage = () => {
                 Total allocated: {formatCurrency(totalBudget, state.profile.currency)}
               </span>
               <span className="meta-copy">
-                Income coverage: {formatPercent((totalBudget / state.profile.monthlyIncome) * 100)}
+                Income coverage: {formatPercent(incomeCoverage)}
               </span>
             </div>
 

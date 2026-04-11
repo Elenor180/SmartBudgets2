@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowRight, ChartColumnBig, ShieldCheck, Sparkles } from 'lucide-react';
 import { useWorkspace } from '@/app/WorkspaceProvider';
 import { currencies, themeModes } from '@/domain/models';
@@ -13,6 +13,13 @@ const SetupPage = () => {
   );
   const [theme, setTheme] = useState(state.profile.theme);
 
+  useEffect(() => {
+    setFullName(state.profile.fullName);
+    setCurrency(state.profile.currency);
+    setMonthlyIncome(String(state.profile.monthlyIncome));
+    setTheme(state.profile.theme);
+  }, [state.profile]);
+
   const payload = {
     fullName: fullName.trim() || 'Workspace Owner',
     email: auth.user?.email || state.profile.email,
@@ -26,11 +33,11 @@ const SetupPage = () => {
       <div className="setup-page__panel">
         <div className="stack-md">
           <span className="eyebrow">Production-grade redesign</span>
-          <h1>Build a calmer finance workspace from the ground up.</h1>
+          <h1>Start with a clean finance workspace and shape it as you go.</h1>
           <p className="page-description">
-            We rebuilt the frontend around typed state, clean routing, and a
-            Supabase-backed customer record so finance data can persist beyond the
-            browser.
+            This onboarding is designed for both self-created accounts and users
+            provisioned manually in Supabase. Start at zero, then update your
+            profile, budgets, and goals when you are ready.
           </p>
         </div>
 
@@ -38,22 +45,22 @@ const SetupPage = () => {
           <Card className="setup-highlight">
             <Sparkles size={24} />
             <div className="stack-xs">
-              <strong>Structured onboarding</strong>
-              <p>Start clean or open with sample data for quick testing.</p>
+              <strong>Zero-state onboarding</strong>
+              <p>Start clean at zero or load sample data for quick testing.</p>
             </div>
           </Card>
           <Card className="setup-highlight">
             <ShieldCheck size={24} />
             <div className="stack-xs">
-              <strong>Stable architecture</strong>
-              <p>State, persistence, and navigation are now separated cleanly.</p>
+              <strong>Editable later</strong>
+              <p>Your profile and workspace values can still be updated after setup.</p>
             </div>
           </Card>
           <Card className="setup-highlight">
             <ChartColumnBig size={24} />
             <div className="stack-xs">
               <strong>Insight-ready design</strong>
-              <p>Every screen is built for dashboards, forms, and future API wiring.</p>
+              <p>Once real values are added, the dashboards and AI can reflect them.</p>
             </div>
           </Card>
         </div>
@@ -123,6 +130,7 @@ const SetupPage = () => {
             <button
               key={option}
               type="button"
+              aria-pressed={option === theme}
               className={
                 option === theme
                   ? 'theme-chip theme-chip--active'

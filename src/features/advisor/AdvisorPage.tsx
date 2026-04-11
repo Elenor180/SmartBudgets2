@@ -72,7 +72,6 @@ const AdvisorPage = () => {
       const response = await requestAdvisorResponse({
         mode,
         prompt: userPrompt,
-        workspace: state,
       });
 
       setMessages((current) => [

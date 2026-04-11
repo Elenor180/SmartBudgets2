@@ -1,5 +1,10 @@
-import type { Session, Subscription, User } from '@supabase/supabase-js';
-import { createDefaultBudgets, createEmptyWorkspace, WORKSPACE_SCHEMA_VERSION } from '@/domain/defaults';
+import type {
+  AuthChangeEvent,
+  Session,
+  Subscription,
+  User,
+} from '@supabase/supabase-js';
+import { createEmptyWorkspace, WORKSPACE_SCHEMA_VERSION } from '@/domain/defaults';
 import type {
   AuthUser,
   Budget,
@@ -143,26 +148,6 @@ const mapReminderRow = (row: ReminderRow): Reminder => ({
   updatedAt: row.updated_at,
 });
 
-const ensureProfileExists = async (user: User) => {
-  const supabase = getSupabaseClient();
-  const payload: Database['public']['Tables']['profiles']['Insert'] = {
-    id: user.id,
-    email: user.email ?? '',
-  };
-
-  if (typeof user.user_metadata.full_name === 'string') {
-    payload.full_name = user.user_metadata.full_name;
-  }
-
-  const { error } = await supabase
-    .from('profiles')
-    .upsert(payload, { onConflict: 'id' });
-
-  if (error) {
-    throw error;
-  }
-};
-
 const mapBudgetsForRpc = (budgets: Budget[]): Json =>
   budgets.map((budget) => ({
     id: budget.id,
@@ -225,7 +210,7 @@ export const getCurrentSession = async (): Promise<Session | null> => {
 };
 
 export const onAuthStateChange = (
-  callback: (session: Session | null) => void,
+  callback: (event: AuthChangeEvent, session: Session | null) => void,
 ): Subscription | null => {
   if (!isSupabaseConfigured) {
     return null;
@@ -233,8 +218,8 @@ export const onAuthStateChange = (
 
   const {
     data: { subscription },
-  } = getSupabaseClient().auth.onAuthStateChange((_event, session) => {
-    callback(session);
+  } = getSupabaseClient().auth.onAuthStateChange((event, session) => {
+    callback(event, session);
   });
 
   return subscription;
@@ -290,6 +275,23 @@ export const signUpWithPassword = async ({
   };
 };
 
+export const resendSignUpConfirmation = async (email: string) => {
+  const emailRedirectTo =
+    typeof window === 'undefined' ? undefined : window.location.origin;
+
+  const { error } = await getSupabaseClient().auth.resend({
+    type: 'signup',
+    email,
+    options: {
+      emailRedirectTo,
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+};
+
 export const signOutFromSupabase = async () => {
   const { error } = await getSupabaseClient().auth.signOut();
 
@@ -310,17 +312,25 @@ export const getAuthUser = (session: Session | null): AuthUser | null => {
 };
 
 export const loadWorkspaceForUser = async (user: User): Promise<WorkspaceState> => {
-  await ensureProfileExists(user);
-
   const supabase = getSupabaseClient();
+  const profileResult = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (profileResult.error) {
+    throw profileResult.error;
+  }
+
+  let profileRow = profileResult.data;
+
   const [
-    profileResult,
     budgetsResult,
     transactionsResult,
     goalsResult,
     remindersResult,
   ] = await Promise.all([
-    supabase.from('profiles').select('*').eq('id', user.id).single(),
     supabase.from('budgets').select('*').eq('user_id', user.id),
     supabase
       .from('transactions')
@@ -330,10 +340,6 @@ export const loadWorkspaceForUser = async (user: User): Promise<WorkspaceState> 
     supabase.from('goals').select('*').eq('user_id', user.id),
     supabase.from('reminders').select('*').eq('user_id', user.id),
   ]);
-
-  if (profileResult.error) {
-    throw profileResult.error;
-  }
 
   if (budgetsResult.error) {
     throw budgetsResult.error;
@@ -352,11 +358,13 @@ export const loadWorkspaceForUser = async (user: User): Promise<WorkspaceState> 
   }
 
   const fallback = createBaseWorkspaceForUser(user);
-  const profile = mapProfileRow(profileResult.data, user);
+  const profile = profileRow
+    ? mapProfileRow(profileRow, user)
+    : fallback.profile;
 
   return {
     version: WORKSPACE_SCHEMA_VERSION,
-    setupComplete: profileResult.data.setup_complete,
+    setupComplete: profileRow?.setup_complete ?? false,
     profile,
     budgets:
       budgetsResult.data.length > 0
