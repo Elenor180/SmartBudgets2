@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Loader2, MailWarning, ShieldCheck } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { getSupabaseClient, isSupabaseConfigured } from '@/integrations/supabase/client';
 import { toErrorMessage } from '@/lib/errors';
 import { Button, Card, NoticeBanner } from '@/ui/components';
@@ -16,6 +16,7 @@ const validOtpTypes = new Set<VerifyOtpType>([
 ]);
 
 const ConfirmSignupPage = () => {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<ConfirmationStatus>('loading');
   const [message, setMessage] = useState(
@@ -68,7 +69,7 @@ const ConfirmSignupPage = () => {
         );
 
         window.setTimeout(() => {
-          window.location.replace('/');
+          navigate('/', { replace: true });
         }, 1200);
       })
       .catch((error) => {
@@ -80,7 +81,7 @@ const ConfirmSignupPage = () => {
           ),
         );
       });
-  }, [searchParams]);
+  }, [navigate, searchParams]);
 
   return (
     <div className="auth-page">
@@ -131,7 +132,7 @@ const ConfirmSignupPage = () => {
                 <strong>Email confirmed</strong>
               </div>
               <NoticeBanner tone="success">{message}</NoticeBanner>
-              <Button onClick={() => window.location.replace('/')}>
+              <Button onClick={() => navigate('/', { replace: true })}>
                 Continue to Smart Budgets
               </Button>
             </>
@@ -145,7 +146,7 @@ const ConfirmSignupPage = () => {
               </div>
               <NoticeBanner tone="danger">{message}</NoticeBanner>
               <Link to="/" className="button button--secondary">
-                Return to sign in
+                Return to the workspace entry
               </Link>
             </>
           ) : null}

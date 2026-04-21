@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { KeyRound, Mail, ShieldCheck, UserRound } from 'lucide-react';
 import { useWorkspace } from '@/app/WorkspaceProvider';
-import { Button, Card, NoticeBanner } from '@/ui/components';
+import { Button, Card, FieldMessage, NoticeBanner } from '@/ui/components';
+
+const emailPattern = /\S+@\S+\.\S+/;
+const strongPasswordPattern =
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{10,}$/;
 
 const AuthPage = () => {
   const { auth, actions } = useWorkspace();
@@ -9,6 +13,11 @@ const AuthPage = () => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{
+    fullName?: string;
+    email?: string;
+    password?: string;
+  }>({});
   const normalizedEmail = email.trim();
   const showResendConfirmation =
     mode === 'signin' &&
@@ -18,21 +27,50 @@ const AuthPage = () => {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!email.trim() || !password.trim()) {
+    if (auth.isLoading) {
       return;
     }
+
+    const nextFieldErrors: {
+      fullName?: string;
+      email?: string;
+      password?: string;
+    } = {};
+
+    if (!emailPattern.test(normalizedEmail)) {
+      nextFieldErrors.email = 'Enter a valid email address.';
+    }
+
+    if (!password.trim()) {
+      nextFieldErrors.password = 'Enter your password.';
+    } else if (mode === 'signup' && !strongPasswordPattern.test(password)) {
+      nextFieldErrors.password =
+        'Use at least 10 characters with uppercase, lowercase, number, and symbol.';
+    }
+
+    if (mode === 'signup' && fullName.trim() && fullName.trim().length < 2) {
+      nextFieldErrors.fullName =
+        'Use at least 2 characters or leave this blank to use Workspace Owner.';
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      return;
+    }
+
+    setFieldErrors({});
 
     if (mode === 'signup') {
       await actions.signUp({
         fullName: fullName.trim() || 'Workspace Owner',
-        email: email.trim(),
+        email: normalizedEmail,
         password,
       });
       return;
     }
 
     await actions.signIn({
-      email: email.trim(),
+      email: normalizedEmail,
       password,
     });
   };
@@ -97,7 +135,10 @@ const AuthPage = () => {
             <button
               type="button"
               className={mode === 'signin' ? 'theme-chip theme-chip--active' : 'theme-chip'}
-              onClick={() => setMode('signin')}
+              onClick={() => {
+                setMode('signin');
+                setFieldErrors({});
+              }}
               aria-pressed={mode === 'signin'}
             >
               Sign in
@@ -105,7 +146,10 @@ const AuthPage = () => {
             <button
               type="button"
               className={mode === 'signup' ? 'theme-chip theme-chip--active' : 'theme-chip'}
-              onClick={() => setMode('signup')}
+              onClick={() => {
+                setMode('signup');
+                setFieldErrors({});
+              }}
               aria-pressed={mode === 'signup'}
             >
               Create account
@@ -116,13 +160,18 @@ const AuthPage = () => {
           {auth.syncError ? <NoticeBanner tone="danger">{auth.syncError}</NoticeBanner> : null}
           {mode === 'signup' ? (
             <NoticeBanner>
-              Use a real email address you can access. This project currently requires
-              email confirmation before password sign-in is allowed.
+              Use a real email address you can access. This project requires email
+              confirmation before password sign-in is allowed.
             </NoticeBanner>
-          ) : null}
+          ) : (
+            <NoticeBanner>
+              If the user was created manually in Supabase, sign in here and finish
+              setup inside the app.
+            </NoticeBanner>
+          )}
         </div>
 
-        <form className="stack-md" onSubmit={handleSubmit}>
+        <form className="stack-md" onSubmit={handleSubmit} noValidate>
           {mode === 'signup' ? (
             <label className="field">
               <span>Full name</span>
@@ -131,10 +180,30 @@ const AuthPage = () => {
                 <input
                   className="input input--bare"
                   value={fullName}
-                  onChange={(event) => setFullName(event.target.value)}
+                  onChange={(event) => {
+                    setFullName(event.target.value);
+                    setFieldErrors((current) => ({
+                      ...current,
+                      fullName: undefined,
+                    }));
+                  }}
                   placeholder="Randy Coster"
+                  autoComplete="name"
+                  aria-invalid={Boolean(fieldErrors.fullName)}
+                  aria-describedby={
+                    fieldErrors.fullName ? 'auth-full-name-error' : 'auth-full-name-help'
+                  }
                 />
               </div>
+              {fieldErrors.fullName ? (
+                <FieldMessage id="auth-full-name-error" tone="danger">
+                  {fieldErrors.fullName}
+                </FieldMessage>
+              ) : (
+                <FieldMessage id="auth-full-name-help">
+                  Optional. Leave this blank to use Workspace Owner.
+                </FieldMessage>
+              )}
             </label>
           ) : null}
 
@@ -146,10 +215,24 @@ const AuthPage = () => {
                 className="input input--bare"
                 type="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setFieldErrors((current) => ({
+                    ...current,
+                    email: undefined,
+                  }));
+                }}
                 placeholder="you@example.com"
+                autoComplete="email"
+                aria-invalid={Boolean(fieldErrors.email)}
+                aria-describedby={fieldErrors.email ? 'auth-email-error' : undefined}
               />
             </div>
+            {fieldErrors.email ? (
+              <FieldMessage id="auth-email-error" tone="danger">
+                {fieldErrors.email}
+              </FieldMessage>
+            ) : null}
           </label>
 
           <label className="field">
@@ -160,10 +243,39 @@ const AuthPage = () => {
                 className="input input--bare"
                 type="password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="At least 6 characters"
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  setFieldErrors((current) => ({
+                    ...current,
+                    password: undefined,
+                  }));
+                }}
+                placeholder={
+                  mode === 'signup'
+                    ? 'Use 10+ characters and a symbol'
+                    : 'Enter your password'
+                }
+                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                aria-invalid={Boolean(fieldErrors.password)}
+                aria-describedby={
+                  fieldErrors.password
+                    ? 'auth-password-error'
+                    : mode === 'signup'
+                      ? 'auth-password-help'
+                      : undefined
+                }
               />
             </div>
+            {fieldErrors.password ? (
+              <FieldMessage id="auth-password-error" tone="danger">
+                {fieldErrors.password}
+              </FieldMessage>
+            ) : mode === 'signup' ? (
+              <FieldMessage id="auth-password-help">
+                Use at least 10 characters with uppercase, lowercase, number,
+                and symbol.
+              </FieldMessage>
+            ) : null}
           </label>
 
           <Button type="submit" disabled={auth.isLoading}>

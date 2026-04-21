@@ -148,3 +148,31 @@ export const NoticeBanner = ({
     {children}
   </div>
 );
+
+export const FieldMessage = ({
+  children,
+  id,
+  tone = 'info',
+}: {
+  children: React.ReactNode;
+  id?: string;
+  tone?: 'info' | 'danger' | 'success';
+}) => (
+  <p
+    id={id}
+    className="meta-copy"
+    role={tone === 'danger' ? 'alert' : undefined}
+    aria-live={tone === 'danger' ? 'polite' : undefined}
+    style={{
+      margin: 0,
+      color:
+        tone === 'danger'
+          ? 'var(--rose)'
+          : tone === 'success'
+            ? 'var(--mint)'
+            : undefined,
+    }}
+  >
+    {children}
+  </p>
+);

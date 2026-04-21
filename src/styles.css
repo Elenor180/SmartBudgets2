@@ -244,12 +244,37 @@ button {
   background: linear-gradient(180deg, rgba(17, 28, 27, 0.92), rgba(17, 28, 27, 0.72), transparent);
 }
 
-.topbar__meta {
+.topbar__heading {
+  min-width: 0;
+}
+
+.topbar__description {
+  margin: 0;
+  max-width: 58ch;
+  color: var(--text-muted);
+}
+
+.topbar__actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 0.85rem;
+  min-width: 0;
   color: var(--text-muted);
+}
+
+.topbar__email {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+}
+
+.topbar__mobile-toggle {
+  display: none;
 }
 
 .app-main {
@@ -270,6 +295,10 @@ button {
   align-items: end;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.page-header__action {
+  flex-shrink: 0;
 }
 
 .page-header h1,
@@ -383,6 +412,33 @@ button {
   align-content: start;
   gap: 1.25rem;
   padding: 1.75rem;
+}
+
+.setup-section {
+  display: grid;
+  gap: 1rem;
+  padding: 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.setup-income-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.setup-income-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(180px, 0.7fr) auto;
+  gap: 0.85rem;
+  align-items: end;
+}
+
+.setup-expense-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
 }
 
 .auth-page__form {
@@ -507,6 +563,20 @@ button {
   outline: none;
   border-color: rgba(15, 118, 110, 0.42);
   box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
+}
+
+.input--invalid,
+.select--invalid,
+.textarea--invalid {
+  border-color: rgba(190, 18, 60, 0.45);
+  box-shadow: 0 0 0 1px rgba(190, 18, 60, 0.16);
+}
+
+.input--invalid:focus,
+.select--invalid:focus,
+.textarea--invalid:focus {
+  border-color: rgba(190, 18, 60, 0.52);
+  box-shadow: 0 0 0 4px rgba(190, 18, 60, 0.12);
 }
 
 .textarea {
@@ -718,6 +788,14 @@ button {
   gap: 0.75rem;
 }
 
+.list-row__meta {
+  min-width: 0;
+}
+
+.list-row__subtle {
+  color: var(--text-soft);
+}
+
 .list-row__icon,
 .insight-item__icon {
   display: inline-flex;
@@ -746,6 +824,11 @@ button {
   color: var(--rose);
   border-color: rgba(190, 18, 60, 0.22);
   background: var(--rose-soft);
+}
+
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .insight-item {
@@ -916,6 +999,10 @@ button {
   display: none;
 }
 
+.mobile-overflow-nav {
+  display: none;
+}
+
 @keyframes pulse-orb {
   0%,
   100% {
@@ -959,6 +1046,10 @@ button {
   .auth-page {
     grid-template-columns: 1fr;
   }
+
+  .setup-expense-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 940px) {
@@ -974,6 +1065,63 @@ button {
   .topbar {
     padding-left: 1rem;
     padding-right: 1rem;
+  }
+
+  .setup-income-row {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar__email,
+  .topbar__signout {
+    display: none;
+  }
+
+  .topbar__mobile-toggle {
+    display: inline-flex;
+  }
+
+  .mobile-overflow-nav {
+    position: fixed;
+    left: 1rem;
+    right: 1rem;
+    bottom: calc(5.75rem + env(safe-area-inset-bottom));
+    z-index: 35;
+    gap: 0.55rem;
+    padding: 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-panel-strong);
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(24px);
+  }
+
+  .mobile-overflow-nav--open {
+    display: grid;
+  }
+
+  .mobile-overflow-nav__link {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    padding: 0.8rem 0.9rem;
+    color: var(--text-muted);
+    transition:
+      border-color 160ms ease,
+      background 160ms ease,
+      color 160ms ease;
+  }
+
+  .mobile-overflow-nav__link:hover {
+    border-color: var(--border);
+    background: rgba(255, 255, 255, 0.22);
+  }
+
+  .mobile-overflow-nav__link--active {
+    border-color: rgba(15, 118, 110, 0.18);
+    background: linear-gradient(135deg, var(--teal-soft), rgba(255, 255, 255, 0.36));
+    color: var(--text);
   }
 
   .mobile-nav {
@@ -1017,6 +1165,15 @@ button {
   .topbar {
     align-items: start;
     flex-direction: column;
+  }
+
+  .page-header__action,
+  .topbar__actions {
+    width: 100%;
+  }
+
+  .topbar__actions {
+    justify-content: flex-start;
   }
 
   .metric-grid,

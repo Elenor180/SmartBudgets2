@@ -16,7 +16,7 @@ import {
   createSampleWorkspace,
 } from '@/domain/defaults';
 import { sortBudgets } from '@/domain/selectors';
-import { createId } from '@/lib/id';
+import { createId, isUuid } from '@/lib/id';
 
 const now = () => new Date().toISOString();
 const validCategoryIds = new Set<CategoryId>([
@@ -105,7 +105,10 @@ const normalizeBudgets = (value: unknown): Budget[] => {
     const timestamp = now();
 
     return {
-      id: typeof candidate.id === 'string' ? candidate.id : createId('budget'),
+      id:
+        typeof candidate.id === 'string' && isUuid(candidate.id)
+          ? candidate.id
+          : createId('budget'),
       categoryId: normalizeCategory(candidate.categoryId ?? candidate.category),
       limit: toNumber(candidate.limit, 0),
       createdAt:
@@ -144,7 +147,9 @@ const normalizeTransactions = (value: unknown): Transaction[] => {
 
       return {
         id:
-          typeof candidate.id === 'string' ? candidate.id : createId('transaction'),
+          typeof candidate.id === 'string' && isUuid(candidate.id)
+            ? candidate.id
+            : createId('transaction'),
         description:
           typeof candidate.description === 'string'
             ? candidate.description
@@ -175,7 +180,10 @@ const normalizeGoals = (value: unknown): Goal[] => {
     const timestamp = now();
 
     return {
-      id: typeof candidate.id === 'string' ? candidate.id : createId('goal'),
+      id:
+        typeof candidate.id === 'string' && isUuid(candidate.id)
+          ? candidate.id
+          : createId('goal'),
       name: typeof candidate.name === 'string' ? candidate.name : 'Untitled goal',
       categoryId: normalizeCategory(candidate.categoryId ?? candidate.category),
       targetAmount: toNumber(candidate.targetAmount, 0),
@@ -218,7 +226,9 @@ const normalizeReminders = (value: unknown): Reminder[] => {
 
     return {
       id:
-        typeof candidate.id === 'string' ? candidate.id : createId('reminder'),
+        typeof candidate.id === 'string' && isUuid(candidate.id)
+          ? candidate.id
+          : createId('reminder'),
       title:
         typeof candidate.title === 'string'
           ? candidate.title
@@ -279,18 +289,51 @@ export const createWorkspaceFromSetup = (
   seedSample: boolean,
 ) => {
   if (seedSample) {
-    return createSampleWorkspace(payload);
+    return createSampleWorkspace({
+      fullName: payload.fullName,
+      email: payload.email,
+      currency: payload.currency,
+      monthlyIncome: payload.monthlyIncome,
+      theme: payload.theme,
+    });
   }
 
   const base = createEmptyWorkspace();
+  const timestamp = now();
+  const budgetTargets = new Map<CategoryId, number>();
+
+  for (const target of payload.budgetTargets) {
+    if (target.monthlyAmount > 0) {
+      budgetTargets.set(target.categoryId, target.monthlyAmount);
+    }
+  }
+
+  if (payload.monthlySavingsTarget > 0) {
+    budgetTargets.set('savings', payload.monthlySavingsTarget);
+  }
+
+  const budgets = sortBudgets(
+    Array.from(budgetTargets.entries()).map(([categoryId, monthlyAmount]) => ({
+      id: createId(`budget-${categoryId}`),
+      categoryId,
+      limit: monthlyAmount,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })),
+  );
 
   return {
     ...base,
     setupComplete: true,
     profile: {
       ...base.profile,
-      ...payload,
+      fullName: payload.fullName,
+      email: payload.email,
+      currency: payload.currency,
+      monthlyIncome: payload.monthlyIncome,
+      theme: payload.theme,
       startedAt: now(),
     },
+    budgets,
   };
 };

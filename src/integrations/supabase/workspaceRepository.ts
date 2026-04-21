@@ -27,6 +27,14 @@ type BudgetRow = Database['public']['Tables']['budgets']['Row'];
 type TransactionRow = Database['public']['Tables']['transactions']['Row'];
 type GoalRow = Database['public']['Tables']['goals']['Row'];
 type ReminderRow = Database['public']['Tables']['reminders']['Row'];
+type WorkspaceSnapshotPayload = {
+  profile: ProfileRow | null;
+  setup_complete: boolean | null;
+  budgets: BudgetRow[];
+  transactions: TransactionRow[];
+  goals: GoalRow[];
+  reminders: ReminderRow[];
+};
 
 const now = () => new Date().toISOString();
 
@@ -73,6 +81,14 @@ const toNumber = (value: number | string | null | undefined, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
+
+const asRows = <TRow>(value: Json | null | undefined): TRow[] =>
+  Array.isArray(value) ? (value as TRow[]) : [];
+
+const isJsonObject = (
+  value: Json | null | undefined,
+): value is Record<string, Json> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const createBaseWorkspaceForUser = (user: User): WorkspaceState => {
   const base = createEmptyWorkspace();
@@ -313,67 +329,423 @@ export const getAuthUser = (session: Session | null): AuthUser | null => {
 
 export const loadWorkspaceForUser = async (user: User): Promise<WorkspaceState> => {
   const supabase = getSupabaseClient();
-  const profileResult = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc('get_workspace_snapshot');
 
-  if (profileResult.error) {
-    throw profileResult.error;
-  }
-
-  let profileRow = profileResult.data;
-
-  const [
-    budgetsResult,
-    transactionsResult,
-    goalsResult,
-    remindersResult,
-  ] = await Promise.all([
-    supabase.from('budgets').select('*').eq('user_id', user.id),
-    supabase
-      .from('transactions')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('occurred_on', { ascending: false }),
-    supabase.from('goals').select('*').eq('user_id', user.id),
-    supabase.from('reminders').select('*').eq('user_id', user.id),
-  ]);
-
-  if (budgetsResult.error) {
-    throw budgetsResult.error;
-  }
-
-  if (transactionsResult.error) {
-    throw transactionsResult.error;
-  }
-
-  if (goalsResult.error) {
-    throw goalsResult.error;
-  }
-
-  if (remindersResult.error) {
-    throw remindersResult.error;
+  if (error) {
+    throw error;
   }
 
   const fallback = createBaseWorkspaceForUser(user);
+  const snapshot = isJsonObject(data)
+    ? (data as unknown as Partial<WorkspaceSnapshotPayload>)
+    : null;
+  const profileRow =
+    snapshot?.profile && isJsonObject(snapshot.profile as Json)
+      ? (snapshot.profile as ProfileRow)
+      : null;
   const profile = profileRow
     ? mapProfileRow(profileRow, user)
     : fallback.profile;
+  const budgets = asRows<BudgetRow>(snapshot?.budgets as Json).map(mapBudgetRow);
+  const transactions = asRows<TransactionRow>(
+    snapshot?.transactions as Json,
+  ).map(mapTransactionRow);
+  const goals = asRows<GoalRow>(snapshot?.goals as Json).map(mapGoalRow);
+  const reminders = asRows<ReminderRow>(
+    snapshot?.reminders as Json,
+  ).map(mapReminderRow);
 
   return {
     version: WORKSPACE_SCHEMA_VERSION,
-    setupComplete: profileRow?.setup_complete ?? false,
+    setupComplete: Boolean(snapshot?.setup_complete ?? profileRow?.setup_complete),
     profile,
-    budgets:
-      budgetsResult.data.length > 0
-        ? sortBudgets(budgetsResult.data.map(mapBudgetRow))
-        : fallback.budgets,
-    transactions: transactionsResult.data.map(mapTransactionRow),
-    goals: goalsResult.data.map(mapGoalRow),
-    reminders: remindersResult.data.map(mapReminderRow),
+    budgets: budgets.length > 0 ? sortBudgets(budgets) : fallback.budgets,
+    transactions,
+    goals,
+    reminders,
   };
+};
+
+export const updateProfileSettings = async ({
+  fullName,
+  currency,
+  monthlyIncome,
+  theme,
+  startedAt,
+  setupComplete,
+}: Partial<
+  Pick<Profile, 'fullName' | 'currency' | 'monthlyIncome' | 'theme' | 'startedAt'>
+> & {
+  setupComplete?: boolean;
+}) => {
+  const { error } = await getSupabaseClient().rpc('upsert_profile_settings', {
+    p_setup_complete: setupComplete ?? null,
+    p_full_name: fullName ?? null,
+    p_currency: currency ?? null,
+    p_monthly_income: monthlyIncome ?? null,
+    p_theme: theme ?? null,
+    p_started_at: startedAt ?? null,
+  });
+
+  if (error) {
+    throw error;
+  }
+};
+
+const createMutationConflictError = (resource: string) =>
+  new Error(`Conflict: ${resource} changed in another session. Reload and try again.`);
+
+export const upsertBudgetRecord = async ({
+  userId,
+  categoryId,
+  limit,
+  currentBudgetId,
+  currentBudgetUpdatedAt,
+}: {
+  userId: string;
+  categoryId: CategoryId;
+  limit: number;
+  currentBudgetId?: string;
+  currentBudgetUpdatedAt?: string;
+}) => {
+  if (currentBudgetId) {
+    const { data, error } = await getSupabaseClient()
+      .from('budgets')
+      .update({
+        limit_amount: limit,
+      })
+      .eq('id', currentBudgetId)
+      .eq('user_id', userId)
+      .eq('updated_at', currentBudgetUpdatedAt ?? '')
+      .select('*')
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      throw createMutationConflictError('budget');
+    }
+
+    return mapBudgetRow(data);
+  }
+
+  const { data, error } = await getSupabaseClient()
+    .from('budgets')
+    .insert({
+      user_id: userId,
+      category_id: categoryId,
+      limit_amount: limit,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapBudgetRow(data);
+};
+
+export const deleteBudgetRecord = async ({
+  userId,
+  budgetId,
+  updatedAt,
+}: {
+  userId: string;
+  budgetId: string;
+  updatedAt: string;
+}) => {
+  const { data, error } = await getSupabaseClient()
+    .from('budgets')
+    .delete()
+    .eq('id', budgetId)
+    .eq('user_id', userId)
+    .eq('updated_at', updatedAt)
+    .select('id')
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw createMutationConflictError('budget');
+  }
+};
+
+export const createTransactionRecord = async ({
+  userId,
+  description,
+  amount,
+  categoryId,
+  occurredOn,
+  notes,
+}: {
+  userId: string;
+  description: string;
+  amount: number;
+  categoryId: CategoryId;
+  occurredOn: string;
+  notes: string;
+}) => {
+  const { data, error } = await getSupabaseClient()
+    .from('transactions')
+    .insert({
+      user_id: userId,
+      description,
+      amount,
+      category_id: categoryId,
+      occurred_on: occurredOn,
+      notes,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapTransactionRow(data);
+};
+
+export const deleteTransactionRecord = async ({
+  userId,
+  transactionId,
+  createdAt,
+}: {
+  userId: string;
+  transactionId: string;
+  createdAt: string;
+}) => {
+  const { data, error } = await getSupabaseClient()
+    .from('transactions')
+    .delete()
+    .eq('id', transactionId)
+    .eq('user_id', userId)
+    .eq('created_at', createdAt)
+    .select('id')
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw createMutationConflictError('transaction');
+  }
+};
+
+export const createGoalRecord = async ({
+  userId,
+  name,
+  categoryId,
+  targetAmount,
+  currentAmount,
+  targetDate,
+  notes,
+}: {
+  userId: string;
+  name: string;
+  categoryId: CategoryId;
+  targetAmount: number;
+  currentAmount: number;
+  targetDate: string;
+  notes: string;
+}) => {
+  const { data, error } = await getSupabaseClient()
+    .from('goals')
+    .insert({
+      user_id: userId,
+      name,
+      category_id: categoryId,
+      target_amount: targetAmount,
+      current_amount: currentAmount,
+      target_date: targetDate || null,
+      notes,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapGoalRow(data);
+};
+
+export const contributeToGoalRecord = async ({
+  userId,
+  goalId,
+  updatedAt,
+  currentAmount,
+  targetAmount,
+  contribution,
+}: {
+  userId: string;
+  goalId: string;
+  updatedAt: string;
+  currentAmount: number;
+  targetAmount: number;
+  contribution: number;
+}) => {
+  const nextAmount = Math.min(
+    targetAmount,
+    Math.max(0, currentAmount + contribution),
+  );
+
+  const { data, error } = await getSupabaseClient()
+    .from('goals')
+    .update({
+      current_amount: nextAmount,
+    })
+    .eq('id', goalId)
+    .eq('user_id', userId)
+    .eq('updated_at', updatedAt)
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw createMutationConflictError('goal');
+  }
+
+  return mapGoalRow(data);
+};
+
+export const deleteGoalRecord = async ({
+  userId,
+  goalId,
+  updatedAt,
+}: {
+  userId: string;
+  goalId: string;
+  updatedAt: string;
+}) => {
+  const { data, error } = await getSupabaseClient()
+    .from('goals')
+    .delete()
+    .eq('id', goalId)
+    .eq('user_id', userId)
+    .eq('updated_at', updatedAt)
+    .select('id')
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw createMutationConflictError('goal');
+  }
+};
+
+export const createReminderRecord = async ({
+  userId,
+  title,
+  kind,
+  categoryId,
+  dueDate,
+  threshold,
+  amount,
+  note,
+  active,
+}: {
+  userId: string;
+  title: string;
+  kind: ReminderKind;
+  categoryId?: CategoryId;
+  dueDate?: string;
+  threshold?: number;
+  amount?: number;
+  note: string;
+  active: boolean;
+}) => {
+  const { data, error } = await getSupabaseClient()
+    .from('reminders')
+    .insert({
+      user_id: userId,
+      title,
+      kind,
+      category_id: categoryId ?? null,
+      due_date: dueDate ?? null,
+      threshold: threshold ?? null,
+      amount: amount ?? null,
+      note,
+      active,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapReminderRow(data);
+};
+
+export const toggleReminderRecord = async ({
+  userId,
+  reminderId,
+  updatedAt,
+  active,
+}: {
+  userId: string;
+  reminderId: string;
+  updatedAt: string;
+  active: boolean;
+}) => {
+  const { data, error } = await getSupabaseClient()
+    .from('reminders')
+    .update({
+      active: !active,
+    })
+    .eq('id', reminderId)
+    .eq('user_id', userId)
+    .eq('updated_at', updatedAt)
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw createMutationConflictError('reminder');
+  }
+
+  return mapReminderRow(data);
+};
+
+export const deleteReminderRecord = async ({
+  userId,
+  reminderId,
+  updatedAt,
+}: {
+  userId: string;
+  reminderId: string;
+  updatedAt: string;
+}) => {
+  const { data, error } = await getSupabaseClient()
+    .from('reminders')
+    .delete()
+    .eq('id', reminderId)
+    .eq('user_id', userId)
+    .eq('updated_at', updatedAt)
+    .select('id')
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw createMutationConflictError('reminder');
+  }
 };
 
 export const replaceWorkspaceSnapshot = async (

@@ -158,12 +158,19 @@ export interface WorkspaceState {
   reminders: Reminder[];
 }
 
+export interface SetupBudgetTarget {
+  categoryId: CategoryId;
+  monthlyAmount: number;
+}
+
 export interface SetupPayload {
   fullName: string;
   email: string;
   currency: Currency;
   monthlyIncome: number;
   theme: ThemeMode;
+  budgetTargets: SetupBudgetTarget[];
+  monthlySavingsTarget: number;
 }
 
 export interface AuthUser {

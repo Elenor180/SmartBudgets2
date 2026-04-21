@@ -197,6 +197,10 @@ export interface Database {
       [_ in never]: never;
     };
     Functions: {
+      get_workspace_snapshot: {
+        Args: Record<PropertyKey, never>;
+        Returns: Json;
+      };
       replace_workspace_snapshot: {
         Args: {
           p_budgets: Json;
@@ -212,6 +216,28 @@ export interface Database {
           p_transactions: Json;
         };
         Returns: undefined;
+      };
+      upsert_profile_settings: {
+        Args: {
+          p_currency?: string | null;
+          p_full_name?: string | null;
+          p_monthly_income?: number | null;
+          p_setup_complete?: boolean | null;
+          p_started_at?: string | null;
+          p_theme?: string | null;
+        };
+        Returns: {
+          created_at: string;
+          currency: string;
+          email: string;
+          full_name: string;
+          id: string;
+          monthly_income: number;
+          setup_complete: boolean;
+          started_at: string;
+          theme: string;
+          updated_at: string;
+        };
       };
     };
     Enums: {

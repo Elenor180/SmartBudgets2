@@ -15,6 +15,7 @@ import {
   WORKSPACE_SCHEMA_VERSION,
 } from '@/domain/defaults';
 import type {
+  Budget,
   CategoryId,
   Goal,
   Profile,
@@ -26,18 +27,31 @@ import type {
   WorkspaceContextValue,
   WorkspaceState,
 } from '@/domain/models';
+import { sortBudgets } from '@/domain/selectors';
 import { isSupabaseConfigured } from '@/integrations/supabase/client';
 import {
+  contributeToGoalRecord,
+  createGoalRecord,
+  createReminderRecord,
+  createTransactionRecord,
+  deleteBudgetRecord,
+  deleteGoalRecord,
+  deleteReminderRecord,
+  deleteTransactionRecord,
   getAuthUser,
   getCurrentSession,
   loadWorkspaceForUser,
   onAuthStateChange,
   replaceWorkspaceSnapshot,
   resendSignUpConfirmation,
+  toggleReminderRecord,
+  upsertBudgetRecord,
+  updateProfileSettings,
   signInWithPassword,
   signOutFromSupabase,
   signUpWithPassword,
 } from '@/integrations/supabase/workspaceRepository';
+import { createId } from '@/lib/id';
 import { createWorkspaceFromSetup, normalizeWorkspace } from '@/lib/storage';
 import { toErrorMessage } from '@/lib/errors';
 
@@ -89,15 +103,6 @@ const isEmailNotConfirmedError = (error: unknown) => {
     code === 'email_not_confirmed' ||
     Boolean(message && /email not confirmed/i.test(message))
   );
-};
-
-const createId = (prefix: string) => {
-  const random =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-  return `${prefix}-${random}`;
 };
 
 const reduceWorkspaceState = (
@@ -292,7 +297,7 @@ export const WorkspaceProvider = ({
   const [auth, setAuth] = useState(initialAuthState);
   const stateRef = useRef(state);
   const authRef = useRef(auth);
-  const saveQueueRef = useRef(Promise.resolve());
+  const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
   const authEventTimeoutsRef = useRef(new Set<number>());
   const workspaceLoadIdRef = useRef(0);
   const loadedWorkspaceUserIdRef = useRef<string | null>(null);
@@ -313,6 +318,82 @@ export const WorkspaceProvider = ({
   useEffect(() => {
     applyTheme(state.profile.theme);
   }, [applyTheme, state.profile.theme]);
+
+  const replaceState = (nextState: WorkspaceState) => {
+    const normalized = normalizeWorkspace({
+      ...nextState,
+      version: WORKSPACE_SCHEMA_VERSION,
+      profile: {
+        ...nextState.profile,
+        email: authRef.current.user?.email ?? nextState.profile.email,
+      },
+    });
+
+    stateRef.current = normalized;
+    dispatch({ type: 'hydrateWorkspace', payload: normalized });
+    return normalized;
+  };
+
+  const sortTransactions = (transactions: Transaction[]) =>
+    [...transactions].sort((left, right) => {
+      const occurredDelta =
+        new Date(right.occurredOn).getTime() - new Date(left.occurredOn).getTime();
+
+      if (occurredDelta !== 0) {
+        return occurredDelta;
+      }
+
+      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    });
+
+  const sortGoals = (goals: Goal[]) =>
+    [...goals].sort(
+      (left, right) =>
+        new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+    );
+
+  const sortReminders = (reminders: Reminder[]) =>
+    [...reminders].sort(
+      (left, right) =>
+        new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+    );
+
+  const runQueuedRemoteMutation = useEffectEvent(
+    async <Result,>(
+      task: () => Promise<Result>,
+      fallbackMessage: string,
+    ) => {
+      setAuth((current) => ({
+        ...current,
+        isSaving: true,
+        syncError: null,
+      }));
+
+      const queuedTask = saveQueueRef.current
+        .catch(() => undefined)
+        .then(task);
+      saveQueueRef.current = queuedTask;
+
+      try {
+        const result = await queuedTask;
+
+        setAuth((current) => ({
+          ...current,
+          isSaving: false,
+          syncError: null,
+        }));
+
+        return result;
+      } catch (error) {
+        setAuth((current) => ({
+          ...current,
+          isSaving: false,
+          syncError: toErrorMessage(error, fallbackMessage),
+        }));
+        throw error;
+      }
+    },
+  );
 
   const syncWorkspace = useEffectEvent((nextState: WorkspaceState) => {
     if (!authRef.current.isAuthenticated) {
@@ -356,19 +437,52 @@ export const WorkspaceProvider = ({
   };
 
   const applyWorkspace = (nextState: WorkspaceState) => {
-    const normalized = normalizeWorkspace({
-      ...nextState,
-      version: WORKSPACE_SCHEMA_VERSION,
-      profile: {
-        ...nextState.profile,
-        email: authRef.current.user?.email ?? nextState.profile.email,
-      },
-    });
-
-    stateRef.current = normalized;
-    dispatch({ type: 'hydrateWorkspace', payload: normalized });
+    const normalized = replaceState(nextState);
     return syncWorkspace(normalized);
   };
+
+  const persistProfileState = useEffectEvent(
+    async (nextState: WorkspaceState, fallbackMessage: string) => {
+      const previousState = stateRef.current;
+      replaceState(nextState);
+
+      if (!authRef.current.isAuthenticated) {
+        return;
+      }
+
+      setAuth((current) => ({
+        ...current,
+        isSaving: true,
+        syncError: null,
+      }));
+
+      try {
+        await updateProfileSettings({
+          setupComplete: nextState.setupComplete,
+          fullName: nextState.profile.fullName,
+          currency: nextState.profile.currency,
+          monthlyIncome: nextState.profile.monthlyIncome,
+          theme: nextState.profile.theme,
+          startedAt: nextState.profile.startedAt,
+        });
+
+        setAuth((current) => ({
+          ...current,
+          isSaving: false,
+          syncError: null,
+        }));
+      } catch (error) {
+        stateRef.current = previousState;
+        dispatch({ type: 'hydrateWorkspace', payload: previousState });
+        setAuth((current) => ({
+          ...current,
+          isSaving: false,
+          syncError: toErrorMessage(error, fallbackMessage),
+        }));
+        throw error;
+      }
+    },
+  );
 
   const buildResetWorkspace = () => {
     const base = createEmptyWorkspace();
@@ -720,49 +834,374 @@ export const WorkspaceProvider = ({
         });
       },
       updateProfile: async (payload) => {
-        await commit({
-          type: 'updateProfile',
-          payload: {
+        const nextState = normalizeWorkspace({
+          ...stateRef.current,
+          version: WORKSPACE_SCHEMA_VERSION,
+          profile: {
+            ...stateRef.current.profile,
             ...payload,
             email: authRef.current.user?.email ?? stateRef.current.profile.email,
           },
         });
+
+        await persistProfileState(
+          nextState,
+          'Unable to save your profile settings right now.',
+        );
       },
       setTheme: async (theme) => {
-        await commit({ type: 'setTheme', payload: theme });
+        const nextState = normalizeWorkspace({
+          ...stateRef.current,
+          version: WORKSPACE_SCHEMA_VERSION,
+          profile: {
+            ...stateRef.current.profile,
+            theme,
+            email: authRef.current.user?.email ?? stateRef.current.profile.email,
+          },
+        });
+
+        await persistProfileState(
+          nextState,
+          'Unable to update your workspace theme right now.',
+        );
       },
       upsertBudget: async (payload) => {
-        await commit({ type: 'upsertBudget', payload });
+        const userId = authRef.current.user?.id;
+
+        if (!userId) {
+          await commit({ type: 'upsertBudget', payload });
+          return;
+        }
+
+        const currentBudget = stateRef.current.budgets.find(
+          (budget) => budget.categoryId === payload.categoryId,
+        );
+        const savedBudget = await runQueuedRemoteMutation(
+          () =>
+            upsertBudgetRecord({
+              userId,
+              categoryId: payload.categoryId,
+              limit: payload.limit,
+              currentBudgetId: currentBudget?.id,
+              currentBudgetUpdatedAt: currentBudget?.updatedAt,
+            }),
+          'Unable to save that budget right now.',
+        );
+
+        replaceState({
+          ...stateRef.current,
+          budgets: sortBudgets(
+            stateRef.current.budgets
+              .filter(
+                (budget) =>
+                  budget.id !== savedBudget.id &&
+                  budget.categoryId !== savedBudget.categoryId,
+              )
+              .concat(savedBudget),
+          ),
+        });
       },
       removeBudget: async (categoryId) => {
-        await commit({ type: 'removeBudget', payload: { categoryId } });
+        const userId = authRef.current.user?.id;
+
+        if (!userId) {
+          await commit({ type: 'removeBudget', payload: { categoryId } });
+          return;
+        }
+
+        const budget = stateRef.current.budgets.find(
+          (entry) => entry.categoryId === categoryId,
+        );
+
+        if (!budget) {
+          return;
+        }
+
+        await runQueuedRemoteMutation(
+          () =>
+            deleteBudgetRecord({
+              userId,
+              budgetId: budget.id,
+              updatedAt: budget.updatedAt,
+            }),
+          'Unable to remove that budget right now.',
+        );
+
+        replaceState({
+          ...stateRef.current,
+          budgets: stateRef.current.budgets.filter(
+            (entry) => entry.id !== budget.id,
+          ),
+        });
       },
       addTransaction: async (payload) => {
-        await commit({ type: 'addTransaction', payload });
+        const userId = authRef.current.user?.id;
+
+        if (!userId) {
+          await commit({ type: 'addTransaction', payload });
+          return;
+        }
+
+        const savedTransaction = await runQueuedRemoteMutation(
+          () =>
+            createTransactionRecord({
+              userId,
+              description: payload.description,
+              amount: payload.amount,
+              categoryId: payload.categoryId,
+              occurredOn: payload.occurredOn,
+              notes: payload.notes,
+            }),
+          'Unable to save that transaction right now.',
+        );
+
+        replaceState({
+          ...stateRef.current,
+          transactions: sortTransactions(
+            [savedTransaction, ...stateRef.current.transactions].filter(
+              (transaction, index, collection) =>
+                collection.findIndex((candidate) => candidate.id === transaction.id) ===
+                index,
+            ),
+          ),
+        });
       },
       deleteTransaction: async (transactionId) => {
-        await commit({ type: 'deleteTransaction', payload: { transactionId } });
+        const userId = authRef.current.user?.id;
+
+        if (!userId) {
+          await commit({ type: 'deleteTransaction', payload: { transactionId } });
+          return;
+        }
+
+        const transaction = stateRef.current.transactions.find(
+          (entry) => entry.id === transactionId,
+        );
+
+        if (!transaction) {
+          return;
+        }
+
+        await runQueuedRemoteMutation(
+          () =>
+            deleteTransactionRecord({
+              userId,
+              transactionId,
+              createdAt: transaction.createdAt,
+            }),
+          'Unable to delete that transaction right now.',
+        );
+
+        replaceState({
+          ...stateRef.current,
+          transactions: stateRef.current.transactions.filter(
+            (entry) => entry.id !== transactionId,
+          ),
+        });
       },
       addGoal: async (payload) => {
-        await commit({ type: 'addGoal', payload });
+        const userId = authRef.current.user?.id;
+
+        if (!userId) {
+          await commit({ type: 'addGoal', payload });
+          return;
+        }
+
+        const savedGoal = await runQueuedRemoteMutation(
+          () =>
+            createGoalRecord({
+              userId,
+              name: payload.name,
+              categoryId: payload.categoryId,
+              targetAmount: payload.targetAmount,
+              currentAmount: payload.currentAmount,
+              targetDate: payload.targetDate,
+              notes: payload.notes,
+            }),
+          'Unable to save that goal right now.',
+        );
+
+        replaceState({
+          ...stateRef.current,
+          goals: sortGoals(
+            [savedGoal, ...stateRef.current.goals].filter(
+              (goal, index, collection) =>
+                collection.findIndex((candidate) => candidate.id === goal.id) === index,
+            ),
+          ),
+        });
       },
       contributeToGoal: async (goalId, contribution) => {
-        await commit({
-          type: 'contributeToGoal',
-          payload: { goalId, contribution },
+        const userId = authRef.current.user?.id;
+
+        if (!userId) {
+          await commit({
+            type: 'contributeToGoal',
+            payload: { goalId, contribution },
+          });
+          return;
+        }
+
+        const goal = stateRef.current.goals.find((entry) => entry.id === goalId);
+
+        if (!goal) {
+          return;
+        }
+
+        const savedGoal = await runQueuedRemoteMutation(
+          () =>
+            contributeToGoalRecord({
+              userId,
+              goalId,
+              updatedAt: goal.updatedAt,
+              currentAmount: goal.currentAmount,
+              targetAmount: goal.targetAmount,
+              contribution,
+            }),
+          'Unable to update that goal right now.',
+        );
+
+        replaceState({
+          ...stateRef.current,
+          goals: sortGoals(
+            stateRef.current.goals
+              .filter((entry) => entry.id !== savedGoal.id)
+              .concat(savedGoal),
+          ),
         });
       },
       deleteGoal: async (goalId) => {
-        await commit({ type: 'deleteGoal', payload: { goalId } });
+        const userId = authRef.current.user?.id;
+
+        if (!userId) {
+          await commit({ type: 'deleteGoal', payload: { goalId } });
+          return;
+        }
+
+        const goal = stateRef.current.goals.find((entry) => entry.id === goalId);
+
+        if (!goal) {
+          return;
+        }
+
+        await runQueuedRemoteMutation(
+          () =>
+            deleteGoalRecord({
+              userId,
+              goalId,
+              updatedAt: goal.updatedAt,
+            }),
+          'Unable to delete that goal right now.',
+        );
+
+        replaceState({
+          ...stateRef.current,
+          goals: stateRef.current.goals.filter((entry) => entry.id !== goalId),
+        });
       },
       addReminder: async (payload) => {
-        await commit({ type: 'addReminder', payload });
+        const userId = authRef.current.user?.id;
+
+        if (!userId) {
+          await commit({ type: 'addReminder', payload });
+          return;
+        }
+
+        const savedReminder = await runQueuedRemoteMutation(
+          () =>
+            createReminderRecord({
+              userId,
+              title: payload.title,
+              kind: payload.kind,
+              categoryId: payload.categoryId,
+              dueDate: payload.dueDate,
+              threshold: payload.threshold,
+              amount: payload.amount,
+              note: payload.note,
+              active: payload.active,
+            }),
+          'Unable to save that reminder right now.',
+        );
+
+        replaceState({
+          ...stateRef.current,
+          reminders: sortReminders(
+            [savedReminder, ...stateRef.current.reminders].filter(
+              (reminder, index, collection) =>
+                collection.findIndex((candidate) => candidate.id === reminder.id) ===
+                index,
+            ),
+          ),
+        });
       },
       toggleReminder: async (reminderId) => {
-        await commit({ type: 'toggleReminder', payload: { reminderId } });
+        const userId = authRef.current.user?.id;
+
+        if (!userId) {
+          await commit({ type: 'toggleReminder', payload: { reminderId } });
+          return;
+        }
+
+        const reminder = stateRef.current.reminders.find(
+          (entry) => entry.id === reminderId,
+        );
+
+        if (!reminder) {
+          return;
+        }
+
+        const savedReminder = await runQueuedRemoteMutation(
+          () =>
+            toggleReminderRecord({
+              userId,
+              reminderId,
+              updatedAt: reminder.updatedAt,
+              active: reminder.active,
+            }),
+          'Unable to update that reminder right now.',
+        );
+
+        replaceState({
+          ...stateRef.current,
+          reminders: sortReminders(
+            stateRef.current.reminders
+              .filter((entry) => entry.id !== savedReminder.id)
+              .concat(savedReminder),
+          ),
+        });
       },
       deleteReminder: async (reminderId) => {
-        await commit({ type: 'deleteReminder', payload: { reminderId } });
+        const userId = authRef.current.user?.id;
+
+        if (!userId) {
+          await commit({ type: 'deleteReminder', payload: { reminderId } });
+          return;
+        }
+
+        const reminder = stateRef.current.reminders.find(
+          (entry) => entry.id === reminderId,
+        );
+
+        if (!reminder) {
+          return;
+        }
+
+        await runQueuedRemoteMutation(
+          () =>
+            deleteReminderRecord({
+              userId,
+              reminderId,
+              updatedAt: reminder.updatedAt,
+            }),
+          'Unable to delete that reminder right now.',
+        );
+
+        replaceState({
+          ...stateRef.current,
+          reminders: stateRef.current.reminders.filter(
+            (entry) => entry.id !== reminderId,
+          ),
+        });
       },
       replaceWorkspace: async (payload) => {
         await applyWorkspace(payload);

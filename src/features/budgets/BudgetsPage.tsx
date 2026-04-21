@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useWorkspace } from '@/app/WorkspaceProvider';
 import { categoryDefinitions, type CategoryId } from '@/domain/models';
@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   EmptyState,
+  FieldMessage,
   PageHeader,
   ProgressBar,
   SectionHeader,
@@ -18,25 +19,43 @@ const BudgetsPage = () => {
   const { state, actions } = useWorkspace();
   const [categoryId, setCategoryId] = useState<CategoryId>('food');
   const [limit, setLimit] = useState('');
+  const [limitError, setLimitError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const limitInputRef = useRef<HTMLInputElement | null>(null);
   const budgetPerformance = getBudgetPerformance(state);
   const totalBudget = getTotalBudget(state);
   const incomeCoverage =
     state.profile.monthlyIncome > 0
       ? (totalBudget / state.profile.monthlyIncome) * 100
       : 0;
+  const parsedLimit = Number(limit);
+  const isLimitValid =
+    limit.trim().length > 0 && Number.isFinite(parsedLimit) && parsedLimit > 0;
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (Number(limit) <= 0) {
+    if (!isLimitValid) {
+      setLimitError('Enter a monthly limit greater than 0.');
       return;
     }
 
-    actions.upsertBudget({
-      categoryId,
-      limit: Number(limit),
-    });
-    setLimit('');
+    setLimitError(null);
+    setSubmitError(null);
+    setIsSubmitting(true);
+
+    try {
+      await actions.upsertBudget({
+        categoryId,
+        limit: parsedLimit,
+      });
+      setLimit('');
+    } catch {
+      setSubmitError('Budget could not be saved. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -75,13 +94,26 @@ const BudgetsPage = () => {
             <label className="field">
               <span>Monthly limit</span>
               <input
-                className="input"
+                ref={limitInputRef}
+                className={limitError ? 'input input--invalid' : 'input'}
                 type="number"
                 min="0"
                 step="0.01"
                 value={limit}
-                onChange={(event) => setLimit(event.target.value)}
+                aria-invalid={limitError ? 'true' : 'false'}
+                aria-describedby={limitError ? 'budget-limit-error' : undefined}
+                onChange={(event) => {
+                  setLimit(event.target.value);
+                  if (limitError) {
+                    setLimitError(null);
+                  }
+                }}
               />
+              {limitError ? (
+                <FieldMessage id="budget-limit-error" tone="danger">
+                  {limitError}
+                </FieldMessage>
+              ) : null}
             </label>
 
             <div className="stack-xs">
@@ -93,7 +125,11 @@ const BudgetsPage = () => {
               </span>
             </div>
 
-            <Button type="submit">Save budget</Button>
+            {submitError ? <FieldMessage tone="danger">{submitError}</FieldMessage> : null}
+
+            <Button type="submit" disabled={isSubmitting || !isLimitValid}>
+              {isSubmitting ? 'Saving budget...' : 'Save budget'}
+            </Button>
           </form>
         </Card>
 
@@ -146,6 +182,20 @@ const BudgetsPage = () => {
             <EmptyState
               title="No budgets configured"
               description="Save your first category limit and start tracking performance."
+              action={
+                <Button
+                  tone="secondary"
+                  type="button"
+                  onClick={() => {
+                    setCategoryId('food');
+                    setLimit('');
+                    setLimitError(null);
+                    limitInputRef.current?.focus();
+                  }}
+                >
+                  Add first budget
+                </Button>
+              }
             />
           )}
         </Card>

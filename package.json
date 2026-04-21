@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test --test-isolation=none",
+    "test:ci": "node --test --test-isolation=none",
+    "ci": "npm run typecheck && npm run build && npm run test:ci"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",

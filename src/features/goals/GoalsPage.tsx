@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useWorkspace } from '@/app/WorkspaceProvider';
 import { categoryDefinitions, type CategoryId } from '@/domain/models';
@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   EmptyState,
+  FieldMessage,
   PageHeader,
   ProgressBar,
   SectionHeader,
@@ -22,28 +23,119 @@ const GoalsPage = () => {
   const [targetDate, setTargetDate] = useState('');
   const [notes, setNotes] = useState('');
   const [contributions, setContributions] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<{
+    name?: string;
+    targetAmount?: string;
+    currentAmount?: string;
+    submit?: string;
+  }>({});
+  const [contributionErrors, setContributionErrors] = useState<
+    Record<string, string | undefined>
+  >({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [contributionGoalId, setContributionGoalId] = useState<string | null>(null);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const trimmedName = name.trim();
+  const parsedTargetAmount = Number(targetAmount);
+  const parsedCurrentAmount =
+    currentAmount.trim().length === 0 ? 0 : Number(currentAmount);
+  const isNameValid = trimmedName.length >= 2;
+  const isTargetAmountValid =
+    targetAmount.trim().length > 0 &&
+    Number.isFinite(parsedTargetAmount) &&
+    parsedTargetAmount > 0;
+  const isCurrentAmountValid =
+    Number.isFinite(parsedCurrentAmount) &&
+    parsedCurrentAmount >= 0 &&
+    (!isTargetAmountValid || parsedCurrentAmount <= parsedTargetAmount);
+  const canSubmit =
+    isNameValid && isTargetAmountValid && isCurrentAmountValid && !isSubmitting;
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!name.trim() || Number(targetAmount) <= 0) {
+    const nextErrors: {
+      name?: string;
+      targetAmount?: string;
+      currentAmount?: string;
+    } = {};
+
+    if (!isNameValid) {
+      nextErrors.name = 'Name this goal so it is easy to recognize.';
+    }
+    if (!isTargetAmountValid) {
+      nextErrors.targetAmount = 'Set a target amount greater than 0.';
+    }
+    if (!isCurrentAmountValid) {
+      nextErrors.currentAmount =
+        'Current amount must be 0 or higher and not exceed the target.';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
       return;
     }
 
-    actions.addGoal({
-      name: name.trim(),
-      categoryId,
-      targetAmount: Number(targetAmount),
-      currentAmount: Number(currentAmount) || 0,
-      targetDate,
-      notes: notes.trim(),
-    });
+    setErrors({});
+    setIsSubmitting(true);
 
-    setName('');
-    setTargetAmount('');
-    setCurrentAmount('');
-    setTargetDate('');
-    setNotes('');
+    try {
+      await actions.addGoal({
+        name: trimmedName,
+        categoryId,
+        targetAmount: parsedTargetAmount,
+        currentAmount: parsedCurrentAmount,
+        targetDate,
+        notes: notes.trim(),
+      });
+
+      setName('');
+      setTargetAmount('');
+      setCurrentAmount('');
+      setTargetDate('');
+      setNotes('');
+    } catch {
+      setErrors({
+        submit: 'Goal could not be saved. Please try again.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleContribution = async (goalId: string) => {
+    const rawValue = contributions[goalId] ?? '';
+    const amount = Number(rawValue);
+    const isValid = rawValue.trim().length > 0 && Number.isFinite(amount) && amount > 0;
+
+    if (!isValid) {
+      setContributionErrors((current) => ({
+        ...current,
+        [goalId]: 'Enter a contribution greater than 0.',
+      }));
+      return;
+    }
+
+    setContributionErrors((current) => ({
+      ...current,
+      [goalId]: undefined,
+    }));
+    setContributionGoalId(goalId);
+
+    try {
+      await actions.contributeToGoal(goalId, amount);
+      setContributions((current) => ({
+        ...current,
+        [goalId]: '',
+      }));
+    } catch {
+      setContributionErrors((current) => ({
+        ...current,
+        [goalId]: 'Contribution failed. Please retry.',
+      }));
+    } finally {
+      setContributionGoalId(null);
+    }
   };
 
   return (
@@ -64,36 +156,85 @@ const GoalsPage = () => {
             <label className="field">
               <span>Goal name</span>
               <input
-                className="input"
+                ref={nameInputRef}
+                className={errors.name ? 'input input--invalid' : 'input'}
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                aria-invalid={errors.name ? 'true' : 'false'}
+                aria-describedby={errors.name ? 'goal-name-error' : undefined}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  if (errors.name || errors.submit) {
+                    setErrors((current) => ({
+                      ...current,
+                      name: undefined,
+                      submit: undefined,
+                    }));
+                  }
+                }}
                 placeholder="Emergency fund, annual insurance, course"
               />
+              {errors.name ? (
+                <FieldMessage id="goal-name-error" tone="danger">
+                  {errors.name}
+                </FieldMessage>
+              ) : null}
             </label>
 
             <div className="form-grid form-grid--tight">
               <label className="field">
                 <span>Target amount</span>
                 <input
-                  className="input"
+                  className={errors.targetAmount ? 'input input--invalid' : 'input'}
                   type="number"
                   min="0"
                   step="0.01"
                   value={targetAmount}
-                  onChange={(event) => setTargetAmount(event.target.value)}
+                  aria-invalid={errors.targetAmount ? 'true' : 'false'}
+                  aria-describedby={errors.targetAmount ? 'goal-target-error' : undefined}
+                  onChange={(event) => {
+                    setTargetAmount(event.target.value);
+                    if (errors.targetAmount || errors.submit) {
+                      setErrors((current) => ({
+                        ...current,
+                        targetAmount: undefined,
+                        submit: undefined,
+                      }));
+                    }
+                  }}
                 />
+                {errors.targetAmount ? (
+                  <FieldMessage id="goal-target-error" tone="danger">
+                    {errors.targetAmount}
+                  </FieldMessage>
+                ) : null}
               </label>
 
               <label className="field">
                 <span>Current amount</span>
                 <input
-                  className="input"
+                  className={errors.currentAmount ? 'input input--invalid' : 'input'}
                   type="number"
                   min="0"
                   step="0.01"
                   value={currentAmount}
-                  onChange={(event) => setCurrentAmount(event.target.value)}
+                  aria-invalid={errors.currentAmount ? 'true' : 'false'}
+                  aria-describedby={errors.currentAmount ? 'goal-current-error' : undefined}
+                  onChange={(event) => {
+                    setCurrentAmount(event.target.value);
+                    if (errors.currentAmount || errors.submit) {
+                      setErrors((current) => ({
+                        ...current,
+                        currentAmount: undefined,
+                        submit: undefined,
+                      }));
+                    }
+                  }}
                 />
+                {errors.currentAmount ? (
+                  <FieldMessage id="goal-current-error" tone="danger">
+                    {errors.currentAmount}
+                  </FieldMessage>
+                ) : null}
               </label>
             </div>
 
@@ -137,7 +278,11 @@ const GoalsPage = () => {
               />
             </label>
 
-            <Button type="submit">Save goal</Button>
+            {errors.submit ? <FieldMessage tone="danger">{errors.submit}</FieldMessage> : null}
+
+            <Button type="submit" disabled={!canSubmit}>
+              {isSubmitting ? 'Saving goal...' : 'Save goal'}
+            </Button>
           </form>
         </Card>
 
@@ -180,6 +325,9 @@ const GoalsPage = () => {
                           {formatCurrency(goal.targetAmount, state.profile.currency)}
                         </strong>
                       </div>
+                      <Tag tone={progress >= 100 ? 'teal' : progress >= 70 ? 'amber' : 'sky'}>
+                        {Math.round(progress)}% funded
+                      </Tag>
                       {goal.targetDate ? (
                         <Tag tone="sky">{formatLongDate(goal.targetDate)}</Tag>
                       ) : null}
@@ -189,37 +337,46 @@ const GoalsPage = () => {
 
                     <div className="split-actions">
                       <input
-                        className="input"
+                        className={
+                          contributionErrors[goal.id] ? 'input input--invalid' : 'input'
+                        }
                         type="number"
                         min="0"
                         step="0.01"
                         value={contributions[goal.id] ?? ''}
+                        aria-invalid={contributionErrors[goal.id] ? 'true' : 'false'}
                         onChange={(event) =>
-                          setContributions((current) => ({
-                            ...current,
-                            [goal.id]: event.target.value,
-                          }))
+                          setContributions((current) => {
+                            if (contributionErrors[goal.id]) {
+                              setContributionErrors((errorsState) => ({
+                                ...errorsState,
+                                [goal.id]: undefined,
+                              }));
+                            }
+
+                            return {
+                              ...current,
+                              [goal.id]: event.target.value,
+                            };
+                          })
                         }
                         placeholder="Contribution amount"
                       />
                       <Button
                         tone="secondary"
-                        onClick={() => {
-                          const value = Number(contributions[goal.id] ?? 0);
-                          if (value <= 0) {
-                            return;
-                          }
-
-                          actions.contributeToGoal(goal.id, value);
-                          setContributions((current) => ({
-                            ...current,
-                            [goal.id]: '',
-                          }));
-                        }}
+                        disabled={contributionGoalId === goal.id}
+                        onClick={() => void handleContribution(goal.id)}
                       >
-                        Add contribution
+                        {contributionGoalId === goal.id
+                          ? 'Saving...'
+                          : 'Add contribution'}
                       </Button>
                     </div>
+                    {contributionErrors[goal.id] ? (
+                      <FieldMessage tone="danger">
+                        {contributionErrors[goal.id]}
+                      </FieldMessage>
+                    ) : null}
                   </div>
                 );
               })}
@@ -228,6 +385,15 @@ const GoalsPage = () => {
             <EmptyState
               title="No goals yet"
               description="Add a savings or purchase target so the workspace can show progress over time."
+              action={
+                <Button
+                  tone="secondary"
+                  type="button"
+                  onClick={() => nameInputRef.current?.focus()}
+                >
+                  Add first goal
+                </Button>
+              }
             />
           )}
         </Card>
